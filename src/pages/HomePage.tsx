@@ -2,8 +2,10 @@ import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function HomePage() {
+  const { user, loading } = useAuth()
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -21,12 +23,22 @@ export default function HomePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <Button asChild variant="default" className="w-full">
-            <Link to="/login">Sign in</Link>
-          </Button>
-          <Button asChild className="w-full">
-            <Link to="/signup">Create account</Link>
-          </Button>
+          {loading ? (
+            <div className="h-[92px]" aria-busy="true" />
+          ) : user ? (
+            <Button asChild variant="default" className="w-full">
+              <Link to="/account">Continue as {user.name}</Link>
+            </Button>
+          ) : (
+            <>
+              <Button asChild variant="default" className="w-full">
+                <Link to="/login">Sign in</Link>
+              </Button>
+              <Button asChild className="w-full">
+                <Link to="/signup">Create account</Link>
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
     </motion.div>

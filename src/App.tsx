@@ -17,6 +17,7 @@ import VerifyEmailPage from '@/pages/VerifyEmailPage'
 import ConfirmEmailPage from '@/pages/ConfirmEmailPage'
 import AccountPage from '@/pages/AccountPage'
 import AdminPage from '@/pages/AdminPage'
+import ConsentPage from '@/pages/ConsentPage'
 
 export default function App() {
   return (
@@ -45,6 +46,8 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
             <Route path="/confirm-email" element={<ConfirmEmailPage />} />
+            {/* OAuth consent: signs in first (via ?next=) when needed */}
+            <Route path="/consent" element={<ConsentPage />} />
           </Route>
 
           <Route element={<PrivateRoute />}>

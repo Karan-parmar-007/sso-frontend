@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { toast } from 'sonner'
@@ -11,35 +11,32 @@ import { getErrorMessage } from '@/lib/errors'
 export default function VerifyEmailPage() {
   const [params] = useSearchParams()
   const token = params.get('token') || ''
-  const { refreshUser } = useAuth()
-  const [status, setStatus] = useState<'pending' | 'ok' | 'error'>('pending')
-  const [message, setMessage] = useState('Verifying…')
+  const { user, refreshUser } = useAuth()
+  const [status, setStatus] = useState<'pending' | 'ok' | 'error'>(
+    token ? 'pending' : 'error'
+  )
+  const [message, setMessage] = useState(token ? 'Verifying…' : 'Missing verification token')
+  // Tokens are single-use: never post twice (StrictMode re-runs effects).
+  const submitted = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!token) {
-      setStatus('error')
-      setMessage('Missing verification token')
-      return
-    }
-    let cancelled = false
+    if (!token || submitted.current === token) return
+    submitted.current = token
     ;(async () => {
       try {
         await apiClient.post('/verify-email', { token })
-        if (cancelled) return
         await refreshUser()
         setStatus('ok')
         setMessage('Email verified successfully')
         toast.success('Email verified')
       } catch (err) {
-        if (cancelled) return
         setStatus('error')
         setMessage(getErrorMessage(err, 'Verification failed'))
       }
     })()
-    return () => {
-      cancelled = true
-    }
   }, [token, refreshUser])
+
+  const signedIn = Boolean(user)
 
   return (
     <motion.div
@@ -57,8 +54,8 @@ export default function VerifyEmailPage() {
         <CardContent className="flex flex-col gap-3">
           {status !== 'pending' && (
             <Button asChild variant="default">
-              <Link to={status === 'ok' ? '/account' : '/login'}>
-                {status === 'ok' ? 'Go to account' : 'Back to sign in'}
+              <Link to={signedIn ? '/account' : '/login'}>
+                {signedIn ? 'Go to account' : status === 'ok' ? 'Sign in' : 'Back to sign in'}
               </Link>
             </Button>
           )}
