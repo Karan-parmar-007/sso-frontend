@@ -1,23 +1,26 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import { toast } from 'sonner'
 import {
   Shield,
   Users,
   RefreshCw,
-  Dices,
   ChevronLeft,
   ChevronRight,
   BadgeCheck,
   Pencil,
+  AppWindow,
+  ScrollText,
+  Boxes,
+  History,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { PasswordInput } from '@/components/ui/password-input'
 import {
   Dialog,
   DialogContent,
@@ -26,55 +29,57 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { ApplicationsPanel } from '@/components/admin/ApplicationsPanel'
+import { AuditLogPanel } from '@/components/admin/AuditLogPanel'
+import { SecretValue } from '@/components/admin/SecretValue'
+import { useAdminClients, useAdminRoles, useAdminUsers } from '@/components/admin/queries'
+import { ADMIN_KEYS, selectClass, type AdminUser } from '@/components/admin/types'
 import { cn } from '@/lib/utils'
 import apiClient from '@/lib/api'
 import { getErrorMessage } from '@/lib/errors'
 
-type AdminUser = {
-  id: string
-  name: string
-  email: string
-  email_verified: boolean
-  role_name?: string | null
-  created_at?: string | null
-}
+type TabKey = 'users' | 'roles' | 'apps' | 'audit'
 
-type AdminRole = {
-  id: string
-  name: string
-  created_at?: string | null
-  updated_at?: string | null
-}
-
-type TabKey = 'users' | 'roles'
+const TABS: { key: TabKey; label: string; icon: typeof Users }[] = [
+  { key: 'users', label: 'Users', icon: Users },
+  { key: 'roles', label: 'Roles', icon: BadgeCheck },
+  { key: 'apps', label: 'Applications', icon: AppWindow },
+  { key: 'audit', label: 'Audit log', icon: ScrollText },
+]
 
 const PAGE_SIZE = 10
 
-function generateRandomPassword(length = 16) {
-  const alphabet =
-    'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%'
-  const bytes = crypto.getRandomValues(new Uint32Array(length))
-  return Array.from(bytes, (n) => alphabet[n % alphabet.length]).join('')
+type ResetResult = { message: string; email_sent: boolean; reset_link?: string | null }
+
+function sameRoles(a: string[] = [], b: string[] = []) {
+  return a.length === b.length && a.every((r) => b.includes(r))
 }
 
 export default function AdminPage() {
+  const queryClient = useQueryClient()
   const [tab, setTab] = useState<TabKey>('users')
+  const [auditUserId, setAuditUserId] = useState('')
 
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [usersLoading, setUsersLoading] = useState(true)
-  const [busyId, setBusyId] = useState<string | null>(null)
+  const usersQuery = useAdminUsers(page, PAGE_SIZE)
+  const users = usersQuery.data?.users ?? []
+  const total = usersQuery.data?.total_count ?? 0
+  const totalPages = Math.max(1, usersQuery.data?.total_pages ?? 1)
+  const usersLoading = usersQuery.isFetching
 
-  const [roles, setRoles] = useState<AdminRole[]>([])
-  const [rolesLoading, setRolesLoading] = useState(true)
+  const rolesQuery = useAdminRoles()
+  const roles = rolesQuery.data ?? []
+  const rolesLoading = rolesQuery.isFetching
+
+  const clientsQuery = useAdminClients()
+  const clientsWithRoles = (clientsQuery.data ?? []).filter((c) => c.roles.length > 0)
+
+  const [busyId, setBusyId] = useState<string | null>(null)
   const [newRoleName, setNewRoleName] = useState('')
   const [creatingRole, setCreatingRole] = useState(false)
 
   const [resetTarget, setResetTarget] = useState<AdminUser | null>(null)
-  const [resetPassword, setResetPassword] = useState('')
-  const [sendEmail, setSendEmail] = useState(false)
+  const [resetResult, setResetResult] = useState<ResetResult | null>(null)
   const [resetting, setResetting] = useState(false)
 
   const [editTarget, setEditTarget] = useState<AdminUser | null>(null)
@@ -82,61 +87,20 @@ export default function AdminPage() {
   const [editVerified, setEditVerified] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
 
-  const loadUsers = useCallback(async (pageNum: number) => {
-    setUsersLoading(true)
-    try {
-      const { data } = await apiClient.get<{
-        total_count: number
-        page: number
-        page_size: number
-        total_pages: number
-        users: AdminUser[]
-      }>('/admin/users', {
-        params: { page: pageNum, page_size: PAGE_SIZE },
-      })
-      setUsers(data.users)
-      setTotal(data.total_count)
-      setPage(data.page)
-      setTotalPages(data.total_pages)
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to load users'))
-    } finally {
-      setUsersLoading(false)
-    }
-  }, [])
+  const [appRolesTarget, setAppRolesTarget] = useState<AdminUser | null>(null)
+  const [appRolesDraft, setAppRolesDraft] = useState<Record<string, string[]>>({})
+  const [savingAppRoles, setSavingAppRoles] = useState(false)
 
-  const loadRoles = useCallback(async () => {
-    setRolesLoading(true)
-    try {
-      const { data } = await apiClient.get<{
-        total_count: number
-        roles: AdminRole[]
-      }>('/admin/roles')
-      setRoles(data.roles)
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to load roles'))
-    } finally {
-      setRolesLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    loadUsers(1)
-    loadRoles()
-  }, [loadUsers, loadRoles])
-
-  function openResetDialog(user: AdminUser) {
-    setResetTarget(user)
-    setResetPassword('')
-    setSendEmail(false)
+  function invalidateUsers() {
+    return queryClient.invalidateQueries({ queryKey: ADMIN_KEYS.allUsers })
   }
 
-  function closeResetDialog() {
-    if (resetting) return
-    setResetTarget(null)
-    setResetPassword('')
-    setSendEmail(false)
+  function showActivity(user: AdminUser) {
+    setAuditUserId(user.id)
+    setTab('audit')
   }
+
+  // ---- Edit user ----------------------------------------------------------
 
   function openEditDialog(user: AdminUser) {
     setEditTarget(user)
@@ -147,8 +111,6 @@ export default function AdminPage() {
   function closeEditDialog() {
     if (savingEdit) return
     setEditTarget(null)
-    setEditEmail('')
-    setEditVerified(false)
   }
 
   async function submitEditUser() {
@@ -158,7 +120,6 @@ export default function AdminPage() {
       toast.error('Email is required')
       return
     }
-
     setSavingEdit(true)
     setBusyId(editTarget.id)
     try {
@@ -168,7 +129,7 @@ export default function AdminPage() {
       })
       toast.success('User updated')
       setEditTarget(null)
-      await loadUsers(page)
+      await invalidateUsers()
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to update user'))
     } finally {
@@ -177,56 +138,106 @@ export default function AdminPage() {
     }
   }
 
+  // ---- Global role ----------------------------------------------------------
+
   async function changeRole(userId: string, role_name: string) {
     setBusyId(userId)
     try {
       await apiClient.patch(`/admin/users/${userId}/role`, { role_name })
       toast.success(`Role updated to ${role_name}`)
-      await loadUsers(page)
+      await invalidateUsers()
     } catch (err) {
-      toast.error(getErrorMessage(err))
+      // e.g. "Cannot remove the last owner" — the select stays on the old value.
+      toast.error(getErrorMessage(err, 'Failed to change role'))
     } finally {
       setBusyId(null)
     }
   }
 
-  async function submitResetPassword() {
-    if (!resetTarget) return
-    if (!resetPassword || resetPassword.length < 8) {
-      toast.error('Password must be at least 8 characters')
+  // ---- App roles ------------------------------------------------------------
+
+  function openAppRolesDialog(user: AdminUser) {
+    setAppRolesTarget(user)
+    setAppRolesDraft({ ...(user.app_roles ?? {}) })
+  }
+
+  function toggleAppRole(clientId: string, role: string, on: boolean) {
+    setAppRolesDraft((draft) => {
+      const current = draft[clientId] ?? []
+      const next = on ? [...current, role] : current.filter((r) => r !== role)
+      return { ...draft, [clientId]: next }
+    })
+  }
+
+  async function submitAppRoles() {
+    if (!appRolesTarget) return
+    const original = appRolesTarget.app_roles ?? {}
+    const changed = clientsWithRoles.filter(
+      (c) => !sameRoles(original[c.client_id], appRolesDraft[c.client_id])
+    )
+    if (changed.length === 0) {
+      setAppRolesTarget(null)
       return
     }
+    setSavingAppRoles(true)
+    setBusyId(appRolesTarget.id)
+    try {
+      for (const c of changed) {
+        await apiClient.put(
+          `/admin/users/${appRolesTarget.id}/app-roles/${encodeURIComponent(c.client_id)}`,
+          { roles: appRolesDraft[c.client_id] ?? [] }
+        )
+      }
+      toast.success('Application roles updated')
+      setAppRolesTarget(null)
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to update application roles'))
+    } finally {
+      await invalidateUsers()
+      setSavingAppRoles(false)
+      setBusyId(null)
+    }
+  }
 
+  // ---- Password reset -------------------------------------------------------
+
+  function openResetDialog(user: AdminUser) {
+    setResetTarget(user)
+    setResetResult(null)
+  }
+
+  function closeResetDialog() {
+    if (resetting) return
+    setResetTarget(null)
+    setResetResult(null)
+  }
+
+  async function submitResetPassword() {
+    if (!resetTarget) return
     setResetting(true)
     setBusyId(resetTarget.id)
     try {
-      const { data } = await apiClient.post<{
-        message: string
-        email_sent: boolean
-        temporary_password?: string | null
-      }>(`/admin/users/${resetTarget.id}/reset-password`, {
-        password: resetPassword,
-        send_email: sendEmail,
-      })
-
-      if (data.email_sent) {
-        toast.success('Password reset — email sent to user')
-      } else if (data.temporary_password) {
-        toast.success(`Password reset. New password: ${data.temporary_password}`)
+      const { data } = await apiClient.post<ResetResult>(
+        `/admin/users/${resetTarget.id}/reset-password`
+      )
+      if (data.reset_link) {
+        // Email could not be sent (or is disabled): hand the link over manually.
+        setResetResult(data)
       } else {
-        toast.success(data.message)
+        toast.success(
+          data.email_sent ? `Reset link emailed to ${resetTarget.email}` : data.message
+        )
+        setResetTarget(null)
       }
-
-      setResetTarget(null)
-      setResetPassword('')
-      setSendEmail(false)
     } catch (err) {
-      toast.error(getErrorMessage(err))
+      toast.error(getErrorMessage(err, 'Failed to reset password'))
     } finally {
       setResetting(false)
       setBusyId(null)
     }
   }
+
+  // ---- Roles ----------------------------------------------------------------
 
   async function createRole(e: React.FormEvent) {
     e.preventDefault()
@@ -240,7 +251,7 @@ export default function AdminPage() {
       await apiClient.post('/admin/roles', { name })
       toast.success(`Role "${name}" created`)
       setNewRoleName('')
-      await loadRoles()
+      await queryClient.invalidateQueries({ queryKey: ADMIN_KEYS.roles })
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to create role'))
     } finally {
@@ -264,33 +275,23 @@ export default function AdminPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 pb-16 space-y-6">
-        <div className="flex gap-2 rounded-lg border border-[rgba(100,255,218,0.12)] bg-[#112240]/50 p-1 w-fit">
-          <button
-            type="button"
-            onClick={() => setTab('users')}
-            className={cn(
-              'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm transition-colors',
-              tab === 'users'
-                ? 'bg-[#64ffda]/15 text-[#64ffda]'
-                : 'text-[#8892b0] hover:text-[#ccd6f6]'
-            )}
-          >
-            <Users className="size-4" />
-            Users
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('roles')}
-            className={cn(
-              'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm transition-colors',
-              tab === 'roles'
-                ? 'bg-[#64ffda]/15 text-[#64ffda]'
-                : 'text-[#8892b0] hover:text-[#ccd6f6]'
-            )}
-          >
-            <BadgeCheck className="size-4" />
-            Roles
-          </button>
+        <div className="flex flex-wrap gap-2 rounded-lg border border-[rgba(100,255,218,0.12)] bg-[#112240]/50 p-1 w-fit">
+          {TABS.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={cn(
+                'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm transition-colors',
+                tab === key
+                  ? 'bg-[#64ffda]/15 text-[#64ffda]'
+                  : 'text-[#8892b0] hover:text-[#ccd6f6]'
+              )}
+            >
+              <Icon className="size-4" />
+              {label}
+            </button>
+          ))}
         </div>
 
         {tab === 'users' && (
@@ -308,7 +309,7 @@ export default function AdminPage() {
                 </div>
                 <Button
                   size="sm"
-                  onClick={() => loadUsers(page)}
+                  onClick={() => usersQuery.refetch()}
                   disabled={usersLoading}
                 >
                   <RefreshCw
@@ -325,73 +326,120 @@ export default function AdminPage() {
                         <th className="text-left p-3 font-medium">Name</th>
                         <th className="text-left p-3 font-medium">Email</th>
                         <th className="text-left p-3 font-medium">Role</th>
+                        <th className="text-left p-3 font-medium">App roles</th>
                         <th className="text-left p-3 font-medium">Verified</th>
                         <th className="text-left p-3 font-medium">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {users.map((u) => (
-                        <tr
-                          key={u.id}
-                          className="border-t border-[rgba(100,255,218,0.08)] hover:bg-[#112240]/80"
-                        >
-                          <td className="p-3 text-[#ccd6f6]">{u.name}</td>
-                          <td className="p-3 text-[#8892b0]">{u.email}</td>
-                          <td className="p-3">
-                            <select
-                              className="h-8 rounded-md border border-[rgba(100,255,218,0.2)] bg-[#0a192f] px-2 text-[#64ffda] outline-none focus:ring-2 focus:ring-[#64ffda]/30"
-                              value={u.role_name || ''}
-                              disabled={busyId === u.id || rolesLoading}
-                              onChange={(e) => {
-                                const next = e.target.value
-                                if (next && next !== u.role_name) {
-                                  changeRole(u.id, next)
-                                }
-                              }}
-                            >
-                              {roles.map((r) => (
-                                <option key={r.id} value={r.name}>
-                                  {r.name}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="p-3">
-                            {u.email_verified ? (
-                              <span className="text-[#64ffda]">yes</span>
-                            ) : (
-                              <span className="text-amber-300">no</span>
-                            )}
-                          </td>
-                          <td className="p-3">
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                disabled={busyId === u.id}
-                                onClick={() => openEditDialog(u)}
+                      {users.map((u) => {
+                        const appRoles = Object.entries(u.app_roles ?? {})
+                        return (
+                          <tr
+                            key={u.id}
+                            className="border-t border-[rgba(100,255,218,0.08)] hover:bg-[#112240]/80"
+                          >
+                            <td className="p-3 text-[#ccd6f6]">{u.name}</td>
+                            <td className="p-3 text-[#8892b0]">{u.email}</td>
+                            <td className="p-3">
+                              <select
+                                className={selectClass}
+                                value={u.role_name || ''}
+                                disabled={busyId === u.id || rolesLoading}
+                                onChange={(e) => {
+                                  const next = e.target.value
+                                  if (next && next !== u.role_name) {
+                                    changeRole(u.id, next)
+                                  }
+                                }}
                               >
-                                <Pencil className="size-3.5" />
-                                Edit
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="default"
-                                disabled={busyId === u.id}
-                                onClick={() => openResetDialog(u)}
-                              >
-                                Reset password
-                              </Button>
-                            </div>
+                                {roles.map((r) => (
+                                  <option key={r.id} value={r.name}>
+                                    {r.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="p-3 text-xs">
+                              {appRoles.length === 0 ? (
+                                <span className="text-[#8892b0]">—</span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {appRoles.map(([app, list]) => (
+                                    <span
+                                      key={app}
+                                      className="rounded-full border border-[rgba(100,255,218,0.2)] px-2 py-0.5 text-[#8892b0]"
+                                    >
+                                      <span className="text-[#ccd6f6]">{app}</span>:{' '}
+                                      {list.join(', ')}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              {u.email_verified ? (
+                                <span className="text-[#64ffda]">yes</span>
+                              ) : (
+                                <span className="text-amber-300">no</span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  disabled={busyId === u.id}
+                                  onClick={() => openEditDialog(u)}
+                                >
+                                  <Pencil className="size-3.5" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  disabled={busyId === u.id || clientsWithRoles.length === 0}
+                                  title={
+                                    clientsWithRoles.length === 0
+                                      ? 'No application defines roles yet'
+                                      : undefined
+                                  }
+                                  onClick={() => openAppRolesDialog(u)}
+                                >
+                                  <Boxes className="size-3.5" />
+                                  App roles
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => showActivity(u)}
+                                >
+                                  <History className="size-3.5" />
+                                  Activity
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  disabled={busyId === u.id}
+                                  onClick={() => openResetDialog(u)}
+                                >
+                                  Reset password
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      {usersQuery.isError && (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-amber-300">
+                            {getErrorMessage(usersQuery.error, 'Failed to load users')}
                           </td>
                         </tr>
-                      ))}
-                      {!usersLoading && users.length === 0 && (
+                      )}
+                      {usersQuery.isSuccess && users.length === 0 && (
                         <tr>
-                          <td
-                            colSpan={5}
-                            className="p-6 text-center text-[#8892b0]"
-                          >
+                          <td colSpan={6} className="p-6 text-center text-[#8892b0]">
                             No users yet
                           </td>
                         </tr>
@@ -408,7 +456,7 @@ export default function AdminPage() {
                     <Button
                       size="sm"
                       disabled={page <= 1 || usersLoading}
-                      onClick={() => loadUsers(page - 1)}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
                     >
                       <ChevronLeft className="size-4" />
                       Prev
@@ -416,7 +464,7 @@ export default function AdminPage() {
                     <Button
                       size="sm"
                       disabled={page >= totalPages || usersLoading}
-                      onClick={() => loadUsers(page + 1)}
+                      onClick={() => setPage((p) => p + 1)}
                     >
                       Next
                       <ChevronRight className="size-4" />
@@ -441,7 +489,8 @@ export default function AdminPage() {
                   Create role
                 </CardTitle>
                 <CardDescription>
-                  Lowercase letters, numbers, underscores. Must start with a letter.
+                  Global roles. Lowercase letters, numbers, underscores; must start with a
+                  letter. App-specific roles are defined per application.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -472,7 +521,7 @@ export default function AdminPage() {
                     {roles.length} role{roles.length === 1 ? '' : 's'}
                   </CardDescription>
                 </div>
-                <Button size="sm" onClick={loadRoles} disabled={rolesLoading}>
+                <Button size="sm" onClick={() => rolesQuery.refetch()} disabled={rolesLoading}>
                   <RefreshCw
                     className={`size-4 ${rolesLoading ? 'animate-spin' : ''}`}
                   />
@@ -492,13 +541,19 @@ export default function AdminPage() {
                       </span>
                     </li>
                   ))}
-                  {!rolesLoading && roles.length === 0 && (
+                  {rolesQuery.isSuccess && roles.length === 0 && (
                     <li className="text-sm text-[#8892b0]">No roles yet</li>
                   )}
                 </ul>
               </CardContent>
             </Card>
           </motion.div>
+        )}
+
+        {tab === 'apps' && <ApplicationsPanel />}
+
+        {tab === 'audit' && (
+          <AuditLogPanel userId={auditUserId} onUserIdChange={setAuditUserId} />
         )}
       </main>
 
@@ -553,6 +608,65 @@ export default function AdminPage() {
       </Dialog>
 
       <Dialog
+        open={Boolean(appRolesTarget)}
+        onOpenChange={(open) => {
+          if (!open && !savingAppRoles) setAppRolesTarget(null)
+        }}
+      >
+        <DialogContent className="max-h-[90svh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Application roles</DialogTitle>
+            <DialogDescription>
+              Roles for <span className="text-[#ccd6f6]">{appRolesTarget?.name}</span> (
+              {appRolesTarget?.email}) in each application. Apps may take up to 15 minutes
+              to see the change in tokens.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-1">
+            {clientsWithRoles.map((c) => (
+              <div
+                key={c.client_id}
+                className="rounded-lg border border-[rgba(100,255,218,0.1)] bg-[#0a192f]/40 px-4 py-3"
+              >
+                <p className="text-sm text-[#ccd6f6]">
+                  {c.name}{' '}
+                  <span className="font-mono text-xs text-[#8892b0]">{c.client_id}</span>
+                </p>
+                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+                  {c.roles.map((role) => (
+                    <label
+                      key={role}
+                      className="flex items-center gap-2 text-sm text-[#8892b0]"
+                    >
+                      <Checkbox
+                        checked={(appRolesDraft[c.client_id] ?? []).includes(role)}
+                        onCheckedChange={(v) => toggleAppRole(c.client_id, role, v === true)}
+                      />
+                      {role}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setAppRolesTarget(null)}
+              disabled={savingAppRoles}
+            >
+              Cancel
+            </Button>
+            <Button variant="default" onClick={submitAppRoles} disabled={savingAppRoles}>
+              {savingAppRoles ? 'Saving…' : 'Save roles'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={Boolean(resetTarget)}
         onOpenChange={(open) => {
           if (!open) closeResetDialog()
@@ -562,55 +676,46 @@ export default function AdminPage() {
           <DialogHeader>
             <DialogTitle>Reset password</DialogTitle>
             <DialogDescription>
-              Set a new password for{' '}
-              <span className="text-[#ccd6f6]">{resetTarget?.name}</span> (
-              {resetTarget?.email}).
+              {resetResult ? (
+                resetResult.message
+              ) : (
+                <>
+                  Invalidate the current password of{' '}
+                  <span className="text-[#ccd6f6]">{resetTarget?.name}</span> (
+                  {resetTarget?.email}), sign them out everywhere and email them a
+                  single-use reset link.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-1">
-            <div className="space-y-2">
-              <Label htmlFor="admin-reset-password">New password</Label>
-              <PasswordInput
-                id="admin-reset-password"
-                value={resetPassword}
-                onChange={(e) => setResetPassword(e.target.value)}
-                minLength={8}
-                autoComplete="new-password"
-                placeholder="Enter manually or generate"
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="w-full"
-                onClick={() => setResetPassword(generateRandomPassword())}
-              >
-                <Dices className="size-4" />
-                Generate random password
-              </Button>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm text-[#8892b0]">
-              <Checkbox
-                checked={sendEmail}
-                onCheckedChange={(v) => setSendEmail(v === true)}
-              />
-              Email this password to the user
-            </label>
-          </div>
+          {resetResult?.reset_link && (
+            <SecretValue
+              label="Reset link"
+              value={resetResult.reset_link}
+              warning={`${
+                resetResult.email_sent
+                  ? 'The link was also emailed to the user.'
+                  : 'The email could not be sent — share this link with the user over a trusted channel.'
+              } It works only once and expires soon; anyone with it can set the password.`}
+            />
+          )}
 
           <DialogFooter>
-            <Button variant="ghost" onClick={closeResetDialog} disabled={resetting}>
-              Cancel
-            </Button>
-            <Button
-              variant="default"
-              onClick={submitResetPassword}
-              disabled={resetting || resetPassword.length < 8}
-            >
-              {resetting ? 'Resetting…' : 'Reset password'}
-            </Button>
+            {resetResult ? (
+              <Button variant="default" onClick={closeResetDialog}>
+                Done
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={closeResetDialog} disabled={resetting}>
+                  Cancel
+                </Button>
+                <Button variant="default" onClick={submitResetPassword} disabled={resetting}>
+                  {resetting ? 'Resetting…' : 'Reset & send link'}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

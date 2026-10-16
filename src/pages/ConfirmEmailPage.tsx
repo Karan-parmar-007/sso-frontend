@@ -1,45 +1,50 @@
-import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import apiClient from '@/lib/api'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth, type AuthUser } from '@/contexts/AuthContext'
 import { getErrorMessage } from '@/lib/errors'
+import type { LoginLocationState } from '@/pages/LoginPage'
 
 export default function ConfirmEmailPage() {
   const [params] = useSearchParams()
   const token = params.get('token') || ''
-  const { refreshUser } = useAuth()
-  const [status, setStatus] = useState<'pending' | 'ok' | 'error'>('pending')
-  const [message, setMessage] = useState('Confirming email change…')
+  const { logout } = useAuth()
+  const navigate = useNavigate()
+  const [status, setStatus] = useState<'pending' | 'error'>(token ? 'pending' : 'error')
+  const [message, setMessage] = useState(
+    token ? 'Confirming email change…' : 'Missing confirmation token'
+  )
+  // Tokens are single-use: never post twice (StrictMode re-runs effects).
+  const submitted = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!token) {
-      setStatus('error')
-      setMessage('Missing confirmation token')
-      return
-    }
-    let cancelled = false
+    if (!token || submitted.current === token) return
+    submitted.current = token
     ;(async () => {
       try {
-        await apiClient.post('/confirm-email-change', { token })
-        if (cancelled) return
-        await refreshUser()
-        setStatus('ok')
-        setMessage('Email updated successfully')
+        const { data } = await apiClient.post<AuthUser>('/confirm-email-change', { token })
+        // The backend signed this account out everywhere (cookies cleared);
+        // forget the user locally and tell other tabs.
+        await logout()
         toast.success('Email updated')
+        const state: LoginLocationState = {
+          email: data.email,
+          notice: {
+            title: 'Email updated',
+            body: `Your email is now ${data.email}. For your security you were signed out everywhere — sign in again with your new address.`,
+          },
+        }
+        navigate('/login', { replace: true, state })
       } catch (err) {
-        if (cancelled) return
         setStatus('error')
         setMessage(getErrorMessage(err, 'Confirmation failed'))
       }
     })()
-    return () => {
-      cancelled = true
-    }
-  }, [token, refreshUser])
+  }, [token, logout, navigate])
 
   return (
     <motion.div
@@ -55,7 +60,7 @@ export default function ConfirmEmailPage() {
           <CardDescription>{message}</CardDescription>
         </CardHeader>
         <CardContent>
-          {status !== 'pending' && (
+          {status === 'error' && (
             <Button asChild variant="default" className="w-full">
               <Link to="/account">Back to account</Link>
             </Button>

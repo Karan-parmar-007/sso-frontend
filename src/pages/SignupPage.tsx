@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
 import { useAuth } from '@/contexts/AuthContext'
 import { getErrorMessage } from '@/lib/errors'
+import type { LoginLocationState } from '@/pages/LoginPage'
 
 export default function SignupPage() {
   const { signup } = useAuth()
@@ -23,14 +24,18 @@ export default function SignupPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      await signup(name, email, password)
-      navigate('/login' + location.search, {
-        replace: true,
-        state: {
-          email,
-          verificationSent: true,
+      const message = await signup(name, email, password)
+      // Same response whether or not the email is already registered.
+      // Keep ?next= so signing in afterwards returns to the calling app.
+      const state: LoginLocationState = {
+        email,
+        notice: {
+          title: 'Check your inbox',
+          body: message || 'Check your inbox to verify your email, then sign in.',
+          resendTo: email,
         },
-      })
+      }
+      navigate('/login' + location.search, { replace: true, state })
     } catch (err) {
       toast.error(getErrorMessage(err, 'Signup failed'))
     } finally {
