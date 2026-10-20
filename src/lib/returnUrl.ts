@@ -10,6 +10,7 @@ const PRODUCTION_RETURN_ORIGINS = [
   'https://www.karanparmar.in',
   'https://familyos.karanparmar.in',
   'https://app.karanparmar.in',
+  'https://studio.karanparmar.in',
 ]
 
 const DEV_RETURN_ORIGINS = [

@@ -17,7 +17,10 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      '/api/auth': { target: 'http://localhost:8000', changeOrigin: true },
+      '/api/auth': {
+        target: process.env.SSO_PROXY_TARGET || 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
 })
