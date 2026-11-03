@@ -69,20 +69,18 @@ export function ApplicationsPanel() {
   const clientsQuery = useAdminClients()
   const clients = clientsQuery.data ?? []
 
-  // null = closed; 'new' = create; otherwise the client being edited
-  const [editing, setEditing] = useState<AdminClient | 'new' | null>(null)
+  const [editing, setEditing] = useState<'new' | AdminClient | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
 
-  const [secret, setSecret] = useState<{ clientId: string; value: string } | null>(null)
-  const [rotateTarget, setRotateTarget] = useState<AdminClient | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AdminClient | null>(null)
+  const [rotateTarget, setRotateTarget] = useState<AdminClient | null>(null)
   const [busy, setBusy] = useState(false)
 
+  const [secret, setSecret] = useState<{ clientId: string; value: string } | null>(null)
+
   function invalidate() {
-    queryClient.invalidateQueries({ queryKey: ADMIN_KEYS.clients })
-    // Role changes can prune users' app roles.
-    queryClient.invalidateQueries({ queryKey: ADMIN_KEYS.allUsers })
+    return queryClient.invalidateQueries({ queryKey: ADMIN_KEYS.clients })
   }
 
   function openCreate() {
@@ -90,49 +88,45 @@ export function ApplicationsPanel() {
     setEditing('new')
   }
 
-  function openEdit(c: AdminClient) {
-    setForm(formFromClient(c))
-    setEditing(c)
+  function openEdit(client: AdminClient) {
+    setForm(formFromClient(client))
+    setEditing(client)
   }
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((f) => ({ ...f, [key]: value }))
+    setForm((prev) => ({ ...prev, [key]: value }))
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!editing) return
-    const body = {
+    setSaving(true)
+    const payload = {
       name: form.name.trim(),
       first_party: form.first_party,
-      roles: parseList(form.roles).map((r) => r.toLowerCase()),
+      roles: parseList(form.roles),
       redirect_uris: parseList(form.redirect_uris),
       post_logout_redirect_uris: parseList(form.post_logout_redirect_uris),
-      allowed_scopes: Array.from(new Set(['openid', ...form.allowed_scopes])),
+      allowed_scopes: form.allowed_scopes,
     }
-    setSaving(true)
     try {
       if (editing === 'new') {
         const { data } = await apiClient.post<AdminClientWithSecret>('/admin/clients', {
-          ...body,
-          client_id: form.client_id.trim().toLowerCase(),
+          ...payload,
+          client_id: form.client_id.trim(),
           confidential: form.confidential,
         })
-        toast.success(`Application "${data.name}" created`)
+        toast.success(`Created ${data.name}`)
+        setEditing(null)
+        await invalidate()
         if (data.client_secret) {
           setSecret({ clientId: data.client_id, value: data.client_secret })
         }
-      } else {
-        await apiClient.patch(`/admin/clients/${encodeURIComponent(editing.client_id)}`, body)
-        const removed = editing.roles.filter((r) => !body.roles.includes(r))
-        toast.success(
-          removed.length
-            ? `Application updated — removed role(s) ${removed.join(', ')} were revoked from users`
-            : 'Application updated'
-        )
+      } else if (editing) {
+        await apiClient.put(`/admin/clients/${editing.client_id}`, payload)
+        toast.success('Application updated')
+        setEditing(null)
+        await invalidate()
       }
-      setEditing(null)
-      invalidate()
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to save application'))
     } finally {
@@ -140,37 +134,35 @@ export function ApplicationsPanel() {
     }
   }
 
-  async function rotateSecret() {
-    if (!rotateTarget) return
+  async function deleteClient() {
+    if (!deleteTarget) return
     setBusy(true)
     try {
-      const { data } = await apiClient.post<AdminClientWithSecret>(
-        `/admin/clients/${encodeURIComponent(rotateTarget.client_id)}/rotate-secret`
-      )
-      setRotateTarget(null)
-      if (data.client_secret) {
-        setSecret({ clientId: data.client_id, value: data.client_secret })
-      }
-      invalidate()
+      await apiClient.delete(`/admin/clients/${deleteTarget.client_id}`)
+      toast.success(`Deleted ${deleteTarget.name}`)
+      setDeleteTarget(null)
+      await invalidate()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to rotate secret'))
+      toast.error(getErrorMessage(err, 'Failed to delete application'))
     } finally {
       setBusy(false)
     }
   }
 
-  async function deleteClient() {
-    if (!deleteTarget) return
+  async function rotateSecret() {
+    if (!rotateTarget) return
     setBusy(true)
     try {
-      const { data } = await apiClient.delete<{ message: string }>(
-        `/admin/clients/${encodeURIComponent(deleteTarget.client_id)}`
+      const { data } = await apiClient.post<{ client_secret: string }>(
+        `/admin/clients/${rotateTarget.client_id}/rotate-secret`
       )
-      toast.success(data.message)
-      setDeleteTarget(null)
-      invalidate()
+      toast.success('Secret rotated')
+      const target = rotateTarget
+      setRotateTarget(null)
+      await invalidate()
+      setSecret({ clientId: target.client_id, value: data.client_secret })
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to delete application'))
+      toast.error(getErrorMessage(err, 'Failed to rotate secret'))
     } finally {
       setBusy(false)
     }
@@ -179,10 +171,14 @@ export function ApplicationsPanel() {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
       <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <span className="desk-sheet-tape" aria-hidden />
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pt-2">
           <div>
-            <CardTitle className="flex items-center gap-2 text-2xl">
-              <AppWindow className="size-5 text-[#64ffda]" />
+            <p className="font-hand text-xl font-semibold text-[var(--forest)] leading-none">
+              ecosystem
+            </p>
+            <CardTitle className="text-2xl sm:text-3xl flex items-center gap-2">
+              <AppWindow className="size-5 text-[var(--forest)]" />
               Applications
             </CardTitle>
             <CardDescription>
@@ -192,16 +188,17 @@ export function ApplicationsPanel() {
           <div className="flex gap-2">
             <Button
               size="sm"
+              variant="outline"
               onClick={() => clientsQuery.refetch()}
               disabled={clientsQuery.isFetching}
             >
               <RefreshCw
-                className={`size-4 ${clientsQuery.isFetching ? 'animate-spin' : ''}`}
+                className={`size-3.5 ${clientsQuery.isFetching ? 'animate-spin' : ''}`}
               />
               Refresh
             </Button>
             <Button size="sm" variant="default" onClick={openCreate}>
-              <Plus className="size-4" />
+              <Plus className="size-3.5" />
               New application
             </Button>
           </div>
@@ -210,34 +207,34 @@ export function ApplicationsPanel() {
           {clients.map((c) => (
             <div
               key={c.client_id}
-              className="flex flex-col gap-3 rounded-lg border border-[rgba(100,255,218,0.1)] bg-[#0a192f]/40 px-4 py-3 lg:flex-row lg:items-start lg:justify-between"
+              className="flex flex-col gap-3 rounded-xl border border-[var(--paper-border)] bg-[var(--paper)] p-4 lg:flex-row lg:items-start lg:justify-between transition-all"
             >
               <div className="min-w-0 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-medium text-[#ccd6f6]">{c.name}</p>
-                  <span className="font-mono text-xs text-[#8892b0]">{c.client_id}</span>
+                  <p className="font-semibold text-sm text-[var(--ink)]">{c.name}</p>
+                  <span className="font-mono text-xs text-[var(--pencil-light)]">{c.client_id}</span>
                   {c.first_party && (
-                    <span className="rounded-full border border-[#64ffda]/40 px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#64ffda]">
+                    <span className="rounded-full border border-[var(--forest)]/40 bg-[var(--forest-tint)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--forest)]">
                       First-party
                     </span>
                   )}
-                  <span className="rounded-full border border-[rgba(100,255,218,0.2)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#8892b0]">
+                  <span className="rounded-full border border-[var(--paper-border-strong)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--pencil)]">
                     {c.confidential ? 'Confidential' : 'Public'}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#8892b0]">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--pencil)]">
                   <span>
                     Roles:{' '}
-                    <span className="text-[#ccd6f6]">
+                    <span className="font-medium text-[var(--ink)]">
                       {c.roles.length ? c.roles.join(', ') : '—'}
                     </span>
                   </span>
                   <span>
-                    Scopes: <span className="text-[#ccd6f6]">{c.allowed_scopes.join(' ')}</span>
+                    Scopes: <span className="font-mono text-[var(--ink)]">{c.allowed_scopes.join(' ')}</span>
                   </span>
                 </div>
                 {c.redirect_uris.length > 0 && (
-                  <ul className="space-y-0.5 text-xs text-[#8892b0]">
+                  <ul className="space-y-0.5 text-xs text-[var(--pencil-light)]">
                     {c.redirect_uris.map((uri) => (
                       <li key={uri} className="font-mono break-all">
                         {uri}
@@ -247,7 +244,7 @@ export function ApplicationsPanel() {
                 )}
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <Button size="sm" variant="secondary" onClick={() => openEdit(c)}>
+                <Button size="sm" variant="outline" onClick={() => openEdit(c)}>
                   <Pencil className="size-3.5" />
                   Edit
                 </Button>
@@ -256,19 +253,19 @@ export function ApplicationsPanel() {
                   {c.confidential ? 'Rotate secret' : 'Create secret'}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(c)}>
-                  <Trash2 className="size-3.5 text-red-300" />
+                  <Trash2 className="size-3.5 text-[var(--terracotta)]" />
                   Delete
                 </Button>
               </div>
             </div>
           ))}
           {clientsQuery.isError && (
-            <p className="text-sm text-amber-300">
+            <p className="text-xs text-[var(--terracotta)]">
               {getErrorMessage(clientsQuery.error, 'Failed to load applications')}
             </p>
           )}
           {clientsQuery.isSuccess && clients.length === 0 && (
-            <p className="text-sm text-[#8892b0]">No applications yet.</p>
+            <p className="text-xs text-[var(--pencil)]">No applications yet.</p>
           )}
         </CardContent>
       </Card>
@@ -290,7 +287,7 @@ export function ApplicationsPanel() {
           </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="client-id">Client ID</Label>
                 <Input
                   id="client-id"
@@ -303,7 +300,7 @@ export function ApplicationsPanel() {
                   onChange={(e) => update('client_id', e.target.value)}
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="client-name">Name</Label>
                 <Input
                   id="client-name"
@@ -315,7 +312,7 @@ export function ApplicationsPanel() {
               </div>
             </div>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
-              <label className="flex items-center gap-2 text-sm text-[#8892b0]">
+              <label className="flex items-center gap-2 text-xs text-[var(--pencil)] cursor-pointer">
                 <Checkbox
                   checked={form.first_party}
                   onCheckedChange={(v) => update('first_party', v === true)}
@@ -323,7 +320,7 @@ export function ApplicationsPanel() {
                 First-party (no consent screen)
               </label>
               {editing === 'new' && (
-                <label className="flex items-center gap-2 text-sm text-[#8892b0]">
+                <label className="flex items-center gap-2 text-xs text-[var(--pencil)] cursor-pointer">
                   <Checkbox
                     checked={form.confidential}
                     onCheckedChange={(v) => update('confidential', v === true)}
@@ -332,7 +329,7 @@ export function ApplicationsPanel() {
                 </label>
               )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="client-roles">App roles</Label>
               <Input
                 id="client-roles"
@@ -340,11 +337,11 @@ export function ApplicationsPanel() {
                 value={form.roles}
                 onChange={(e) => update('roles', e.target.value)}
               />
-              <p className="text-xs text-[#8892b0]">
+              <p className="text-[11px] text-[var(--pencil-light)]">
                 Comma-separated. Removing a role revokes it from every user.
               </p>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="client-redirects">Redirect URIs</Label>
               <textarea
                 id="client-redirects"
@@ -354,7 +351,7 @@ export function ApplicationsPanel() {
                 onChange={(e) => update('redirect_uris', e.target.value)}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="client-logout-redirects">Post-logout redirect URIs</Label>
               <textarea
                 id="client-logout-redirects"
@@ -364,17 +361,16 @@ export function ApplicationsPanel() {
                 onChange={(e) => update('post_logout_redirect_uris', e.target.value)}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label>Allowed scopes</Label>
               <div className="flex flex-wrap gap-x-5 gap-y-2">
                 {SUPPORTED_SCOPES.map((scope) => (
                   <label
                     key={scope}
-                    className="flex items-center gap-2 font-mono text-xs text-[#8892b0]"
+                    className="flex items-center gap-2 font-mono text-xs text-[var(--pencil)] cursor-pointer"
                   >
                     <Checkbox
                       checked={scope === 'openid' || form.allowed_scopes.includes(scope)}
-                      // OIDC requires openid; the API rejects clients without it.
                       disabled={scope === 'openid'}
                       onCheckedChange={(v) =>
                         update(

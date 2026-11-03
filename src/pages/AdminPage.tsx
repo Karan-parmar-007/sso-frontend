@@ -4,7 +4,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import { toast } from 'sonner'
 import {
-  Shield,
   Users,
   RefreshCw,
   ChevronLeft,
@@ -15,6 +14,9 @@ import {
   ScrollText,
   Boxes,
   History,
+  ArrowLeft,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,6 +31,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { KeyMark } from '@/components/KeyMark'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { ApplicationsPanel } from '@/components/admin/ApplicationsPanel'
 import { AuditLogPanel } from '@/components/admin/AuditLogPanel'
 import { SecretValue } from '@/components/admin/SecretValue'
@@ -147,8 +151,8 @@ export default function AdminPage() {
       toast.success(`Role updated to ${role_name}`)
       await invalidateUsers()
     } catch (err) {
-      // e.g. "Cannot remove the last owner" — the select stays on the old value.
       toast.error(getErrorMessage(err, 'Failed to change role'))
+      await invalidateUsers()
     } finally {
       setBusyId(null)
     }
@@ -158,48 +162,49 @@ export default function AdminPage() {
 
   function openAppRolesDialog(user: AdminUser) {
     setAppRolesTarget(user)
-    setAppRolesDraft({ ...(user.app_roles ?? {}) })
+    const initial: Record<string, string[]> = {}
+    for (const c of clientsWithRoles) {
+      initial[c.client_id] = [...(user.app_roles?.[c.client_id] ?? [])]
+    }
+    setAppRolesDraft(initial)
   }
 
-  function toggleAppRole(clientId: string, role: string, on: boolean) {
-    setAppRolesDraft((draft) => {
-      const current = draft[clientId] ?? []
-      const next = on ? [...current, role] : current.filter((r) => r !== role)
-      return { ...draft, [clientId]: next }
+  function toggleAppRole(clientId: string, role: string, checked: boolean) {
+    setAppRolesDraft((prev) => {
+      const current = prev[clientId] ?? []
+      const next = checked
+        ? Array.from(new Set([...current, role]))
+        : current.filter((r) => r !== role)
+      return { ...prev, [clientId]: next }
     })
   }
 
   async function submitAppRoles() {
     if (!appRolesTarget) return
-    const original = appRolesTarget.app_roles ?? {}
-    const changed = clientsWithRoles.filter(
-      (c) => !sameRoles(original[c.client_id], appRolesDraft[c.client_id])
-    )
-    if (changed.length === 0) {
-      setAppRolesTarget(null)
-      return
-    }
     setSavingAppRoles(true)
-    setBusyId(appRolesTarget.id)
     try {
-      for (const c of changed) {
+      const original = appRolesTarget.app_roles ?? {}
+      const updates = clientsWithRoles.map(async (c) => {
+        const next = appRolesDraft[c.client_id] ?? []
+        const prev = original[c.client_id] ?? []
+        if (sameRoles(prev, next)) return
         await apiClient.put(
           `/admin/users/${appRolesTarget.id}/app-roles/${encodeURIComponent(c.client_id)}`,
-          { roles: appRolesDraft[c.client_id] ?? [] }
+          { roles: next }
         )
-      }
+      })
+      await Promise.all(updates)
       toast.success('Application roles updated')
       setAppRolesTarget(null)
+      await invalidateUsers()
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to update application roles'))
     } finally {
-      await invalidateUsers()
       setSavingAppRoles(false)
-      setBusyId(null)
     }
   }
 
-  // ---- Password reset -------------------------------------------------------
+  // ---- Reset password -------------------------------------------------------
 
   function openResetDialog(user: AdminUser) {
     setResetTarget(user)
@@ -215,37 +220,25 @@ export default function AdminPage() {
   async function submitResetPassword() {
     if (!resetTarget) return
     setResetting(true)
-    setBusyId(resetTarget.id)
     try {
       const { data } = await apiClient.post<ResetResult>(
         `/admin/users/${resetTarget.id}/reset-password`
       )
-      if (data.reset_link) {
-        // Email could not be sent (or is disabled): hand the link over manually.
-        setResetResult(data)
-      } else {
-        toast.success(
-          data.email_sent ? `Reset link emailed to ${resetTarget.email}` : data.message
-        )
-        setResetTarget(null)
-      }
+      setResetResult(data)
+      toast.success(data.message)
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to reset password'))
     } finally {
       setResetting(false)
-      setBusyId(null)
     }
   }
 
-  // ---- Roles ----------------------------------------------------------------
+  // ---- Roles tab ------------------------------------------------------------
 
   async function createRole(e: React.FormEvent) {
     e.preventDefault()
     const name = newRoleName.trim().toLowerCase()
-    if (!name) {
-      toast.error('Role name is required')
-      return
-    }
+    if (!name) return
     setCreatingRole(true)
     try {
       await apiClient.post('/admin/roles', { name })
@@ -260,35 +253,48 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="relative min-h-svh">
-      <div className="aurora-bg" aria-hidden />
-      <header className="flex items-center justify-between px-6 py-5 max-w-6xl mx-auto w-full">
-        <Link to="/account" className="flex items-center gap-2 text-[#ccd6f6]">
-          <Shield className="size-5 text-[#64ffda]" />
-          <span className="font-semibold">
-            Auth<span className="gradient-text">SSO</span> Admin
+    <div className="min-h-svh flex flex-col justify-between transition-colors duration-200">
+      {/* Top Header */}
+      <header className="w-full max-w-6xl mx-auto px-4 sm:px-8 py-5 flex items-center justify-between gap-4">
+        <Link
+          to="/account"
+          className="group inline-flex items-center gap-2 font-hand text-2xl sm:text-3xl font-bold text-[var(--ink)] tracking-tight hover:opacity-85 transition-opacity"
+        >
+          <KeyMark className="size-5 sm:size-6 text-[var(--forest)] transition-transform group-hover:rotate-12" />
+          <span>karan</span>
+          <span className="hidden sm:inline-block font-sans text-[11px] uppercase tracking-wider font-semibold text-[var(--pencil-light)] ml-1 border-l border-[var(--paper-border)] pl-2">
+            Admin Console
           </span>
         </Link>
-        <Button asChild size="sm">
-          <Link to="/account">Back to account</Link>
-        </Button>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          <ThemeToggle />
+          <Button asChild size="sm" variant="outline">
+            <Link to="/account">
+              <ArrowLeft className="size-3.5" />
+              <span className="hidden sm:inline">My Account</span>
+            </Link>
+          </Button>
+        </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 pb-16 space-y-6">
-        <div className="flex flex-wrap gap-2 rounded-lg border border-[rgba(100,255,218,0.12)] bg-[#112240]/50 p-1 w-fit">
+      {/* Main Admin Content */}
+      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-8 py-4 sm:py-6 space-y-6">
+        {/* Notebook tab switches */}
+        <div className="flex flex-wrap gap-1.5 rounded-full border border-[var(--paper-border-strong)] bg-[var(--paper)] p-1.5 w-fit shadow-xs">
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               type="button"
               onClick={() => setTab(key)}
               className={cn(
-                'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm transition-colors',
+                'inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold transition-all cursor-pointer',
                 tab === key
-                  ? 'bg-[#64ffda]/15 text-[#64ffda]'
-                  : 'text-[#8892b0] hover:text-[#ccd6f6]'
+                  ? 'bg-[var(--forest)] text-[#ffffff] shadow-xs'
+                  : 'text-[var(--pencil)] hover:text-[var(--ink)] hover:bg-[var(--forest-tint)]'
               )}
             >
-              <Icon className="size-4" />
+              <Icon className="size-3.5" />
               {label}
             </button>
           ))}
@@ -297,50 +303,55 @@ export default function AdminPage() {
         {tab === 'users' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <span className="desk-sheet-tape" aria-hidden />
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2">
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-2xl">
-                    <Users className="size-5 text-[#64ffda]" />
-                    Users
+                  <p className="font-hand text-xl font-semibold text-[var(--forest)] leading-none">
+                    directory
+                  </p>
+                  <CardTitle className="text-2xl sm:text-3xl flex items-center gap-2">
+                    <Users className="size-5 text-[var(--forest)]" />
+                    User accounts
                   </CardTitle>
                   <CardDescription>
-                    Total accounts: <span className="text-[#64ffda]">{total}</span>
+                    Total registered accounts: <strong className="text-[var(--forest)]">{total}</strong>
                   </CardDescription>
                 </div>
                 <Button
                   size="sm"
+                  variant="outline"
                   onClick={() => usersQuery.refetch()}
                   disabled={usersLoading}
                 >
                   <RefreshCw
-                    className={`size-4 ${usersLoading ? 'animate-spin' : ''}`}
+                    className={`size-3.5 ${usersLoading ? 'animate-spin' : ''}`}
                   />
                   Refresh
                 </Button>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="overflow-x-auto rounded-lg border border-[rgba(100,255,218,0.1)]">
-                  <table className="w-full text-sm">
-                    <thead className="bg-[#0a192f]/60 text-[#8892b0]">
+                <div className="overflow-x-auto rounded-xl border border-[var(--paper-border)] bg-[var(--paper)]">
+                  <table className="w-full text-xs sm:text-sm">
+                    <thead className="border-b border-[var(--paper-border)] bg-[var(--forest-tint-subtle)] text-[var(--pencil)]">
                       <tr>
-                        <th className="text-left p-3 font-medium">Name</th>
-                        <th className="text-left p-3 font-medium">Email</th>
-                        <th className="text-left p-3 font-medium">Role</th>
-                        <th className="text-left p-3 font-medium">App roles</th>
-                        <th className="text-left p-3 font-medium">Verified</th>
-                        <th className="text-left p-3 font-medium">Actions</th>
+                        <th className="text-left p-3 font-semibold uppercase tracking-wider text-[11px]">Name</th>
+                        <th className="text-left p-3 font-semibold uppercase tracking-wider text-[11px]">Email</th>
+                        <th className="text-left p-3 font-semibold uppercase tracking-wider text-[11px]">Global Role</th>
+                        <th className="text-left p-3 font-semibold uppercase tracking-wider text-[11px]">App Roles</th>
+                        <th className="text-left p-3 font-semibold uppercase tracking-wider text-[11px]">Verified</th>
+                        <th className="text-left p-3 font-semibold uppercase tracking-wider text-[11px]">Actions</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-[var(--paper-border)]">
                       {users.map((u) => {
                         const appRoles = Object.entries(u.app_roles ?? {})
                         return (
                           <tr
                             key={u.id}
-                            className="border-t border-[rgba(100,255,218,0.08)] hover:bg-[#112240]/80"
+                            className="hover:bg-[var(--forest-tint-subtle)] transition-colors"
                           >
-                            <td className="p-3 text-[#ccd6f6]">{u.name}</td>
-                            <td className="p-3 text-[#8892b0]">{u.email}</td>
+                            <td className="p-3 font-semibold text-[var(--ink)]">{u.name}</td>
+                            <td className="p-3 text-[var(--pencil)] font-mono text-xs">{u.email}</td>
                             <td className="p-3">
                               <select
                                 className={selectClass}
@@ -362,16 +373,15 @@ export default function AdminPage() {
                             </td>
                             <td className="p-3 text-xs">
                               {appRoles.length === 0 ? (
-                                <span className="text-[#8892b0]">—</span>
+                                <span className="text-[var(--pencil-light)]">—</span>
                               ) : (
                                 <div className="flex flex-wrap gap-1">
                                   {appRoles.map(([app, list]) => (
                                     <span
                                       key={app}
-                                      className="rounded-full border border-[rgba(100,255,218,0.2)] px-2 py-0.5 text-[#8892b0]"
+                                      className="rounded-full border border-[var(--paper-border-strong)] bg-[var(--paper)] px-2 py-0.5 text-[10px] text-[var(--pencil)]"
                                     >
-                                      <span className="text-[#ccd6f6]">{app}</span>:{' '}
-                                      {list.join(', ')}
+                                      <strong className="text-[var(--ink)]">{app}</strong>: {list.join(', ')}
                                     </span>
                                   ))}
                                 </div>
@@ -379,20 +389,26 @@ export default function AdminPage() {
                             </td>
                             <td className="p-3">
                               {u.email_verified ? (
-                                <span className="text-[#64ffda]">yes</span>
+                                <span className="inline-flex items-center gap-1 text-[var(--forest)] font-medium text-xs">
+                                  <CheckCircle2 className="size-3.5" />
+                                  yes
+                                </span>
                               ) : (
-                                <span className="text-amber-300">no</span>
+                                <span className="inline-flex items-center gap-1 text-[var(--amber-text)] font-medium text-xs">
+                                  <XCircle className="size-3.5" />
+                                  no
+                                </span>
                               )}
                             </td>
                             <td className="p-3">
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex flex-wrap gap-1.5">
                                 <Button
                                   size="sm"
-                                  variant="secondary"
+                                  variant="outline"
                                   disabled={busyId === u.id}
                                   onClick={() => openEditDialog(u)}
                                 >
-                                  <Pencil className="size-3.5" />
+                                  <Pencil className="size-3" />
                                   Edit
                                 </Button>
                                 <Button
@@ -406,15 +422,15 @@ export default function AdminPage() {
                                   }
                                   onClick={() => openAppRolesDialog(u)}
                                 >
-                                  <Boxes className="size-3.5" />
+                                  <Boxes className="size-3" />
                                   App roles
                                 </Button>
                                 <Button
                                   size="sm"
-                                  variant="secondary"
+                                  variant="ghost"
                                   onClick={() => showActivity(u)}
                                 >
-                                  <History className="size-3.5" />
+                                  <History className="size-3" />
                                   Activity
                                 </Button>
                                 <Button
@@ -432,15 +448,15 @@ export default function AdminPage() {
                       })}
                       {usersQuery.isError && (
                         <tr>
-                          <td colSpan={6} className="p-6 text-center text-amber-300">
+                          <td colSpan={6} className="p-6 text-center text-xs text-[var(--terracotta)]">
                             {getErrorMessage(usersQuery.error, 'Failed to load users')}
                           </td>
                         </tr>
                       )}
                       {usersQuery.isSuccess && users.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="p-6 text-center text-[#8892b0]">
-                            No users yet
+                          <td colSpan={6} className="p-6 text-center text-xs text-[var(--pencil)]">
+                            No users registered yet.
                           </td>
                         </tr>
                       )}
@@ -448,26 +464,28 @@ export default function AdminPage() {
                   </table>
                 </div>
 
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-[#8892b0]">
+                <div className="flex items-center justify-between gap-3 pt-2">
+                  <p className="text-xs text-[var(--pencil)]">
                     Page {page} of {totalPages}
                   </p>
                   <div className="flex gap-2">
                     <Button
                       size="sm"
+                      variant="outline"
                       disabled={page <= 1 || usersLoading}
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
                     >
-                      <ChevronLeft className="size-4" />
+                      <ChevronLeft className="size-3.5" />
                       Prev
                     </Button>
                     <Button
                       size="sm"
+                      variant="outline"
                       disabled={page >= totalPages || usersLoading}
                       onClick={() => setPage((p) => p + 1)}
                     >
                       Next
-                      <ChevronRight className="size-4" />
+                      <ChevronRight className="size-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -483,19 +501,22 @@ export default function AdminPage() {
             className="grid gap-6 md:grid-cols-2"
           >
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <BadgeCheck className="size-5 text-[#64ffda]" />
-                  Create role
+              <span className="desk-sheet-tape" aria-hidden />
+              <CardHeader className="pt-2">
+                <p className="font-hand text-xl font-semibold text-[var(--forest)] leading-none">
+                  new definition
+                </p>
+                <CardTitle className="text-2xl flex items-center gap-2">
+                  <BadgeCheck className="size-5 text-[var(--forest)]" />
+                  Create global role
                 </CardTitle>
                 <CardDescription>
-                  Global roles. Lowercase letters, numbers, underscores; must start with a
-                  letter. App-specific roles are defined per application.
+                  Global roles apply across the SSO service. Lowercase letters, numbers, underscores; must start with a letter.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={createRole} className="space-y-4">
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label htmlFor="role-name">Role name</Label>
                     <Input
                       id="role-name"
@@ -514,35 +535,39 @@ export default function AdminPage() {
             </Card>
 
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <span className="desk-sheet-tape" aria-hidden />
+              <CardHeader className="flex flex-row items-center justify-between gap-4 pt-2">
                 <div>
-                  <CardTitle className="text-xl">Existing roles</CardTitle>
+                  <p className="font-hand text-xl font-semibold text-[var(--forest)] leading-none">
+                    active list
+                  </p>
+                  <CardTitle className="text-2xl">Existing roles</CardTitle>
                   <CardDescription>
-                    {roles.length} role{roles.length === 1 ? '' : 's'}
+                    {roles.length} role{roles.length === 1 ? '' : 's'} registered
                   </CardDescription>
                 </div>
-                <Button size="sm" onClick={() => rolesQuery.refetch()} disabled={rolesLoading}>
+                <Button size="sm" variant="outline" onClick={() => rolesQuery.refetch()} disabled={rolesLoading}>
                   <RefreshCw
-                    className={`size-4 ${rolesLoading ? 'animate-spin' : ''}`}
+                    className={`size-3.5 ${rolesLoading ? 'animate-spin' : ''}`}
                   />
                   Refresh
                 </Button>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2">
+                <ul className="space-y-2.5">
                   {roles.map((r) => (
                     <li
                       key={r.id}
-                      className="flex items-center justify-between rounded-md border border-[rgba(100,255,218,0.1)] bg-[#0a192f]/40 px-3 py-2"
+                      className="flex items-center justify-between rounded-xl border border-[var(--paper-border)] bg-[var(--paper)] px-3.5 py-2.5 text-xs sm:text-sm"
                     >
-                      <span className="text-[#64ffda] font-medium">{r.name}</span>
-                      <span className="text-xs text-[#8892b0] font-mono">
+                      <span className="font-semibold text-[var(--forest)]">{r.name}</span>
+                      <span className="text-xs text-[var(--pencil-light)] font-mono">
                         {r.id.slice(-6)}
                       </span>
                     </li>
                   ))}
                   {rolesQuery.isSuccess && roles.length === 0 && (
-                    <li className="text-sm text-[#8892b0]">No roles yet</li>
+                    <li className="text-xs text-[var(--pencil)]">No roles created yet.</li>
                   )}
                 </ul>
               </CardContent>
@@ -557,6 +582,7 @@ export default function AdminPage() {
         )}
       </main>
 
+      {/* Edit User Dialog */}
       <Dialog
         open={Boolean(editTarget)}
         onOpenChange={(open) => {
@@ -565,15 +591,15 @@ export default function AdminPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit user</DialogTitle>
+            <DialogTitle>Edit user details</DialogTitle>
             <DialogDescription>
-              Update email and verification for{' '}
-              <span className="text-[#ccd6f6]">{editTarget?.name}</span>.
+              Update email address and verification status for{' '}
+              <strong className="text-[var(--ink)] font-semibold">{editTarget?.name}</strong>.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-1">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="admin-edit-email">Email</Label>
               <Input
                 id="admin-edit-email"
@@ -583,12 +609,12 @@ export default function AdminPage() {
                 onChange={(e) => setEditEmail(e.target.value)}
               />
             </div>
-            <label className="flex items-center gap-2 text-sm text-[#8892b0]">
+            <label className="flex items-center gap-2 text-xs text-[var(--pencil)] cursor-pointer">
               <Checkbox
                 checked={editVerified}
                 onCheckedChange={(v) => setEditVerified(v === true)}
               />
-              Email verified
+              Mark email as verified
             </label>
           </div>
 
@@ -607,6 +633,7 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      {/* App Roles Dialog */}
       <Dialog
         open={Boolean(appRolesTarget)}
         onOpenChange={(open) => {
@@ -617,27 +644,26 @@ export default function AdminPage() {
           <DialogHeader>
             <DialogTitle>Application roles</DialogTitle>
             <DialogDescription>
-              Roles for <span className="text-[#ccd6f6]">{appRolesTarget?.name}</span> (
-              {appRolesTarget?.email}) in each application. Apps may take up to 15 minutes
-              to see the change in tokens.
+              Assign roles for <strong className="text-[var(--ink)]">{appRolesTarget?.name}</strong> (
+              {appRolesTarget?.email}) in each connected application.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-1">
+          <div className="space-y-3 py-1">
             {clientsWithRoles.map((c) => (
               <div
                 key={c.client_id}
-                className="rounded-lg border border-[rgba(100,255,218,0.1)] bg-[#0a192f]/40 px-4 py-3"
+                className="rounded-xl border border-[var(--paper-border)] bg-[var(--paper)] p-3.5"
               >
-                <p className="text-sm text-[#ccd6f6]">
+                <p className="text-sm font-semibold text-[var(--ink)]">
                   {c.name}{' '}
-                  <span className="font-mono text-xs text-[#8892b0]">{c.client_id}</span>
+                  <span className="font-mono text-xs text-[var(--pencil-light)]">({c.client_id})</span>
                 </p>
-                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+                <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-2">
                   {c.roles.map((role) => (
                     <label
                       key={role}
-                      className="flex items-center gap-2 text-sm text-[#8892b0]"
+                      className="flex items-center gap-2 text-xs text-[var(--pencil)] cursor-pointer"
                     >
                       <Checkbox
                         checked={(appRolesDraft[c.client_id] ?? []).includes(role)}
@@ -666,6 +692,7 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Reset Password Dialog */}
       <Dialog
         open={Boolean(resetTarget)}
         onOpenChange={(open) => {
@@ -674,16 +701,15 @@ export default function AdminPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reset password</DialogTitle>
+            <DialogTitle>Reset user password</DialogTitle>
             <DialogDescription>
               {resetResult ? (
                 resetResult.message
               ) : (
                 <>
                   Invalidate the current password of{' '}
-                  <span className="text-[#ccd6f6]">{resetTarget?.name}</span> (
-                  {resetTarget?.email}), sign them out everywhere and email them a
-                  single-use reset link.
+                  <strong className="text-[var(--ink)]">{resetTarget?.name}</strong> (
+                  {resetTarget?.email}), sign them out everywhere, and generate a single-use reset link.
                 </>
               )}
             </DialogDescription>
@@ -695,9 +721,9 @@ export default function AdminPage() {
               value={resetResult.reset_link}
               warning={`${
                 resetResult.email_sent
-                  ? 'The link was also emailed to the user.'
-                  : 'The email could not be sent — share this link with the user over a trusted channel.'
-              } It works only once and expires soon; anyone with it can set the password.`}
+                  ? 'The link was emailed to the user.'
+                  : 'The email could not be sent — copy this link and share it securely with the user.'
+              } It works only once and expires soon.`}
             />
           )}
 

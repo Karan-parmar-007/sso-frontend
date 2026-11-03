@@ -72,7 +72,7 @@ export async function copyToClipboard(text: string, what = 'Copied') {
 }
 
 export const textareaClass =
-  'placeholder:text-[#8892b0] selection:bg-[#64ffda]/30 min-h-20 w-full rounded-md border border-[rgba(100,255,218,0.15)] bg-[#0a192f]/60 px-3 py-2 font-mono text-xs text-[#ccd6f6] outline-none focus-visible:border-[#64ffda] focus-visible:ring-[3px] focus-visible:ring-[#64ffda]/20'
+  'placeholder:text-[var(--pencil-light)] selection:bg-[var(--forest-tint)] min-h-20 w-full rounded-xl border border-[var(--paper-border)] bg-[var(--paper)] px-3.5 py-2.5 font-mono text-xs text-[var(--ink)] outline-none focus-visible:border-[var(--forest)] focus-visible:ring-3 focus-visible:ring-[var(--forest-tint)] transition-all'
 
 export const selectClass =
-  'h-8 rounded-md border border-[rgba(100,255,218,0.2)] bg-[#0a192f] px-2 text-[#64ffda] outline-none focus:ring-2 focus:ring-[#64ffda]/30'
+  'h-9 rounded-lg border border-[var(--paper-border-strong)] bg-[var(--paper)] px-2.5 text-xs font-semibold text-[var(--forest)] outline-none focus:ring-2 focus:ring-[var(--forest-tint)] cursor-pointer'

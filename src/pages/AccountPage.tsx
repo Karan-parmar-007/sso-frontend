@@ -4,7 +4,6 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { motion } from 'motion/react'
 import { toast } from 'sonner'
 import {
-  Shield,
   Mail,
   KeyRound,
   LogOut,
@@ -15,6 +14,8 @@ import {
   History,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { KeyMark } from '@/components/KeyMark'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { useAuth } from '@/contexts/AuthContext'
 import apiClient from '@/lib/api'
 import { getErrorMessage } from '@/lib/errors'
@@ -124,7 +127,7 @@ export default function AccountPage() {
     const state: LoginLocationState = {
       notice: {
         title: 'Signed out everywhere',
-        body: 'Every session on every device has been ended.',
+        body: 'Every session on every device and application has been ended.',
       },
     }
     navigate('/login', { replace: true, state })
@@ -143,7 +146,6 @@ export default function AccountPage() {
         new_password: newPassword,
         confirm_password: confirmPassword,
       })
-      // e.g. "Password changed successfully; signed out 2 other session(s)"
       toast.success(data.message)
       setOldPassword('')
       setNewPassword('')
@@ -213,71 +215,99 @@ export default function AccountPage() {
   const otherCount = sessions.filter((s) => !s.is_current).length
 
   return (
-    <div className="relative min-h-svh">
-      <div className="aurora-bg" aria-hidden />
-      <header className="flex items-center justify-between px-6 py-5 max-w-5xl mx-auto w-full">
-        <Link to="/account" className="flex items-center gap-2 text-[#ccd6f6]">
-          <Shield className="size-5 text-[#64ffda]" />
-          <span className="font-semibold">
-            Auth<span className="gradient-text">SSO</span>
+    <div className="min-h-svh flex flex-col justify-between transition-colors duration-200">
+      {/* Top Header */}
+      <header className="w-full max-w-5xl mx-auto px-4 sm:px-8 py-5 flex items-center justify-between gap-4">
+        <Link
+          to="/account"
+          className="group inline-flex items-center gap-2 font-hand text-2xl sm:text-3xl font-bold text-[var(--ink)] tracking-tight hover:opacity-85 transition-opacity"
+        >
+          <KeyMark className="size-5 sm:size-6 text-[var(--forest)] transition-transform group-hover:rotate-12" />
+          <span>karan</span>
+          <span className="hidden sm:inline-block font-sans text-[11px] uppercase tracking-wider font-semibold text-[var(--pencil-light)] ml-1 border-l border-[var(--paper-border)] pl-2">
+            Account Desk
           </span>
         </Link>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          <ThemeToggle />
+
           {user.role_name === 'owner' && (
-            <Button asChild size="sm">
+            <Button asChild size="sm" variant="outline">
               <Link to="/admin">
-                <LayoutDashboard className="size-4" />
-                Admin
+                <LayoutDashboard className="size-3.5" />
+                <span className="hidden sm:inline">Admin</span>
               </Link>
             </Button>
           )}
+
           <Button size="sm" variant="ghost" onClick={handleLogout}>
-            <LogOut className="size-4" />
-            Logout
+            <LogOut className="size-3.5" />
+            <span className="hidden sm:inline">Sign out</span>
           </Button>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 pb-16 grid gap-6 md:grid-cols-2">
+      {/* Main Content Grid */}
+      <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-8 py-4 sm:py-6 grid gap-6 md:grid-cols-2">
+        {/* User Identity Banner Card */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           className="md:col-span-2"
         >
           <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">
-                Welcome, <span className="gradient-text">{user.name}</span>
+            <span className="desk-sheet-tape" aria-hidden />
+            <CardHeader className="pt-2">
+              <p className="font-hand text-xl font-semibold text-[var(--forest)] leading-none">
+                identity card
+              </p>
+              <CardTitle className="text-3xl sm:text-4xl">
+                Welcome, {user.name}
               </CardTitle>
               <CardDescription>
-                {user.email} · role{' '}
-                <span className="text-[#64ffda]">{user.role_name || 'user'}</span>
+                {user.email} · global role{' '}
+                <strong className="text-[var(--forest)] font-semibold uppercase text-xs tracking-wider">
+                  {user.role_name || 'user'}
+                </strong>
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-wrap gap-3">
+            <CardContent className="flex flex-wrap items-center gap-2.5 pt-1">
               <div
-                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs border ${
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border',
                   user.email_verified
-                    ? 'border-[#64ffda]/40 text-[#64ffda]'
-                    : 'border-amber-400/40 text-amber-300'
-                }`}
+                    ? 'border-[var(--forest)]/30 bg-[var(--forest-tint)] text-[var(--forest)]'
+                    : 'border-[var(--terracotta)]/30 bg-[var(--terracotta-tint)] text-[var(--terracotta)]'
+                )}
               >
-                <Mail className="size-3.5" />
-                {user.email_verified ? 'Email verified' : 'Email not verified'}
+                {user.email_verified ? (
+                  <>
+                    <CheckCircle2 className="size-3.5" />
+                    <span>Email verified</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="size-3.5" />
+                    <span>Email not verified</span>
+                  </>
+                )}
               </div>
+
               {Object.entries(user.app_roles ?? {}).map(([app, appRoles]) => (
                 <div
                   key={app}
-                  className="inline-flex items-center gap-1 rounded-full border border-[rgba(100,255,218,0.2)] px-3 py-1 text-xs text-[#8892b0]"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--paper-border-strong)] bg-[var(--paper)] px-3 py-1 text-xs text-[var(--pencil)]"
                 >
-                  <span className="text-[#ccd6f6]">{app}</span>
+                  <strong className="text-[var(--ink)] font-semibold">{app}</strong>
                   <span>· {appRoles.join(', ')}</span>
                 </div>
               ))}
+
               {!user.email_verified && (
-                <>
-                  <Button size="sm" onClick={() => setShowVerifyModal(true)}>
-                    Show reminder
+                <div className="flex gap-2 ml-auto">
+                  <Button size="sm" variant="outline" onClick={() => setShowVerifyModal(true)}>
+                    Reminder
                   </Button>
                   <Button
                     size="sm"
@@ -294,14 +324,15 @@ export default function AccountPage() {
                       }
                     }}
                   >
-                    Resend verification
+                    Resend link
                   </Button>
-                </>
+                </div>
               )}
             </CardContent>
           </Card>
         </motion.div>
 
+        {/* Active Sessions Card */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -309,30 +340,36 @@ export default function AccountPage() {
           className="md:col-span-2"
         >
           <Card>
-            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <span className="desk-sheet-tape" aria-hidden />
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2">
               <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Monitor className="size-4 text-[#64ffda]" />
+                <p className="font-hand text-xl font-semibold text-[var(--forest)] leading-none">
+                  signed-in devices
+                </p>
+                <CardTitle className="text-2xl sm:text-3xl flex items-center gap-2">
+                  <Monitor className="size-5 text-[var(--forest)]" />
                   Active sessions
                 </CardTitle>
                 <CardDescription>
-                  Devices where you are signed in. End any session that is not yours.
+                  Devices where you are currently signed in. End any session you do not recognize.
                 </CardDescription>
               </div>
-              <div className="flex flex-wrap gap-2">
+
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
+                  variant="outline"
                   onClick={() => sessionsQuery.refetch()}
                   disabled={sessionsLoading}
                 >
                   <RefreshCw
-                    className={`size-4 ${sessionsLoading ? 'animate-spin' : ''}`}
+                    className={`size-3.5 ${sessionsLoading ? 'animate-spin' : ''}`}
                   />
                   Refresh
                 </Button>
                 <Button
                   size="sm"
-                  variant="default"
+                  variant="secondary"
                   disabled={otherCount === 0 || sessionBusyId !== null}
                   onClick={revokeOthers}
                 >
@@ -344,37 +381,38 @@ export default function AccountPage() {
                   disabled={sessionBusyId !== null}
                   onClick={() => setConfirmEverywhere(true)}
                 >
-                  <LogOut className="size-4" />
+                  <LogOut className="size-3.5" />
                   Sign out everywhere
                 </Button>
               </div>
             </CardHeader>
+
             <CardContent className="space-y-3">
               {sessions.map((session) => (
                 <div
                   key={session.id}
                   className={cn(
-                    'flex flex-col gap-3 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between',
+                    'flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between transition-all',
                     session.is_current
-                      ? 'border-[#64ffda]/35 bg-[#64ffda]/5'
-                      : 'border-[rgba(100,255,218,0.1)] bg-[#0a192f]/40'
+                      ? 'border-[var(--forest)]/40 bg-[var(--forest-tint-subtle)]'
+                      : 'border-[var(--paper-border)] bg-[var(--paper)]'
                   )}
                 >
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm text-[#ccd6f6] truncate">
+                      <p className="text-sm font-semibold text-[var(--ink)] truncate">
                         {shortUserAgent(session.device_info)}
                       </p>
                       {session.is_current && (
-                        <span className="rounded-full border border-[#64ffda]/40 px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#64ffda]">
-                          Current
+                        <span className="rounded-full border border-[var(--forest)]/50 bg-[var(--forest-tint)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--forest)]">
+                          Current device
                         </span>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#8892b0]">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--pencil-light)]">
                       {session.ip_address && (
                         <span className="inline-flex items-center gap-1">
-                          <MapPin className="size-3" />
+                          <MapPin className="size-3 text-[var(--pencil)]" />
                           {session.ip_address}
                         </span>
                       )}
@@ -382,49 +420,55 @@ export default function AccountPage() {
                       <span>Last seen {formatWhen(session.last_seen_at)}</span>
                     </div>
                   </div>
+
                   <Button
                     size="sm"
-                    variant={session.is_current ? 'ghost' : 'default'}
+                    variant={session.is_current ? 'outline' : 'secondary'}
                     disabled={sessionBusyId !== null}
                     onClick={() => revokeSession(session)}
                   >
-                    {session.is_current ? 'End this session' : 'Log out'}
+                    {session.is_current ? 'End this session' : 'Log out device'}
                   </Button>
                 </div>
               ))}
 
               {sessionsQuery.isError && (
-                <p className="text-sm text-amber-300">
+                <p className="text-xs text-[var(--terracotta)]">
                   {getErrorMessage(sessionsQuery.error, 'Failed to load sessions')}
                 </p>
               )}
               {sessionsQuery.isSuccess && sessions.length === 0 && (
-                <p className="text-sm text-[#8892b0]">
-                  No active sessions. Sign in again to create one.
+                <p className="text-xs text-[var(--pencil)]">
+                  No active sessions recorded.
                 </p>
               )}
             </CardContent>
           </Card>
         </motion.div>
 
+        {/* Change Password Card */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08 }}
         >
           <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <KeyRound className="size-4 text-[#64ffda]" />
+            <span className="desk-sheet-tape" aria-hidden />
+            <CardHeader className="pt-2">
+              <p className="font-hand text-xl font-semibold text-[var(--forest)] leading-none">
+                credentials
+              </p>
+              <CardTitle className="text-2xl flex items-center gap-2">
+                <KeyRound className="size-5 text-[var(--forest)]" />
                 Change password
               </CardTitle>
               <CardDescription>
-                Requires your current password. Your other sessions are signed out.
+                Requires your current password. Your other active sessions will be signed out.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleChangePassword} className="space-y-3">
-                <div className="space-y-2">
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div className="space-y-1.5">
                   <Label htmlFor="old-password">Current password</Label>
                   <PasswordInput
                     id="old-password"
@@ -432,9 +476,10 @@ export default function AccountPage() {
                     value={oldPassword}
                     onChange={(e) => setOldPassword(e.target.value)}
                     autoComplete="current-password"
+                    placeholder="Existing password"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="new-password">New password</Label>
                   <PasswordInput
                     id="new-password"
@@ -443,9 +488,10 @@ export default function AccountPage() {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     autoComplete="new-password"
+                    placeholder="Min 8 characters"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="confirm-password">Confirm new password</Label>
                   <PasswordInput
                     id="confirm-password"
@@ -454,35 +500,40 @@ export default function AccountPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     autoComplete="new-password"
+                    placeholder="Repeat new password"
                   />
                 </div>
-                <Button type="submit" variant="default" disabled={busy}>
-                  Update password
+                <Button type="submit" variant="default" className="w-full mt-2" disabled={busy}>
+                  {busy ? 'Updating…' : 'Update password'}
                 </Button>
               </form>
             </CardContent>
           </Card>
         </motion.div>
 
+        {/* Change Email Card */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
           <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="size-4 text-[#64ffda]" />
+            <span className="desk-sheet-tape" aria-hidden />
+            <CardHeader className="pt-2">
+              <p className="font-hand text-xl font-semibold text-[var(--forest)] leading-none">
+                address
+              </p>
+              <CardTitle className="text-2xl flex items-center gap-2">
+                <Mail className="size-5 text-[var(--forest)]" />
                 Change email
               </CardTitle>
               <CardDescription>
-                We send a confirmation link to the new address. Confirming it signs you
-                out everywhere.
+                We will email a confirmation link. Confirming it signs you out everywhere.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleEmailChange} className="space-y-3">
-                <div className="space-y-2">
+              <form onSubmit={handleEmailChange} className="space-y-4">
+                <div className="space-y-1.5">
                   <Label htmlFor="new-email">New email</Label>
                   <Input
                     id="new-email"
@@ -491,9 +542,10 @@ export default function AccountPage() {
                     autoComplete="email"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="new@email.com"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="email-current-password">Current password</Label>
                   <PasswordInput
                     id="email-current-password"
@@ -501,24 +553,29 @@ export default function AccountPage() {
                     autoComplete="current-password"
                     value={emailPassword}
                     onChange={(e) => setEmailPassword(e.target.value)}
+                    placeholder="To confirm identity"
                   />
                 </div>
-                <Button type="submit" variant="default" disabled={busy}>
-                  Request change
+                <Button type="submit" variant="default" className="w-full mt-2" disabled={busy}>
+                  {busy ? 'Requesting…' : 'Request email change'}
                 </Button>
               </form>
-              <Button
-                className="mt-4"
-                variant="ghost"
-                size="sm"
-                onClick={() => refreshUser()}
-              >
-                Refresh profile
-              </Button>
+
+              <div className="mt-4 pt-4 border-t border-[var(--paper-border)] flex justify-between items-center text-xs text-[var(--pencil)]">
+                <span>Profile info out of sync?</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => refreshUser()}
+                >
+                  Refresh profile
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </motion.div>
 
+        {/* Security Activity Card */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -526,24 +583,28 @@ export default function AccountPage() {
           className="md:col-span-2"
         >
           <Card>
-            <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <span className="desk-sheet-tape" aria-hidden />
+            <CardHeader className="flex flex-row items-center justify-between gap-4 pt-2">
               <div>
-                <CardTitle className="flex items-center gap-2">
-                  <History className="size-4 text-[#64ffda]" />
+                <p className="font-hand text-xl font-semibold text-[var(--forest)] leading-none">
+                  timeline
+                </p>
+                <CardTitle className="text-2xl sm:text-3xl flex items-center gap-2">
+                  <History className="size-5 text-[var(--forest)]" />
                   Recent security activity
                 </CardTitle>
                 <CardDescription>
-                  Sign-ins, password and email changes on your account. Don&apos;t
-                  recognise something? Change your password and sign out everywhere.
+                  Sign-ins, email changes, and password updates on your account.
                 </CardDescription>
               </div>
               <Button
                 size="sm"
+                variant="outline"
                 onClick={() => activityQuery.refetch()}
                 disabled={activityQuery.isFetching}
               >
                 <RefreshCw
-                  className={`size-4 ${activityQuery.isFetching ? 'animate-spin' : ''}`}
+                  className={`size-3.5 ${activityQuery.isFetching ? 'animate-spin' : ''}`}
                 />
                 Refresh
               </Button>
@@ -556,41 +617,41 @@ export default function AccountPage() {
                   <div
                     key={event.id}
                     className={cn(
-                      'flex flex-col gap-1 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
+                      'flex flex-col gap-1.5 rounded-xl border p-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 transition-all',
                       tone === 'danger'
-                        ? 'border-red-400/40 bg-red-400/5'
+                        ? 'border-[var(--terracotta)]/40 bg-[var(--terracotta-tint)]'
                         : tone === 'warning'
-                          ? 'border-amber-400/30 bg-amber-400/5'
-                          : 'border-[rgba(100,255,218,0.1)] bg-[#0a192f]/40'
+                          ? 'border-[var(--amber-border)] bg-[var(--amber-card)]'
+                          : 'border-[var(--paper-border)] bg-[var(--paper)]'
                     )}
                   >
                     <div className="min-w-0 space-y-1">
                       <p
                         className={cn(
-                          'text-sm',
+                          'text-sm font-semibold',
                           tone === 'danger'
-                            ? 'text-red-300'
+                            ? 'text-[var(--terracotta)]'
                             : tone === 'warning'
-                              ? 'text-amber-300'
-                              : 'text-[#ccd6f6]'
+                              ? 'text-[var(--amber-text)]'
+                              : 'text-[var(--ink)]'
                         )}
                       >
                         {eventLabel(event.event)}
                       </p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#8892b0]">
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--pencil-light)]">
                         {event.ip && (
                           <span className="inline-flex items-center gap-1">
-                            <MapPin className="size-3" />
+                            <MapPin className="size-3 text-[var(--pencil)]" />
                             {event.ip}
                           </span>
                         )}
                         {event.user_agent && (
-                          <span className="truncate">{shortUserAgent(event.user_agent, 60)}</span>
+                          <span className="truncate max-w-xs">{shortUserAgent(event.user_agent, 55)}</span>
                         )}
-                        {details && <span>{details}</span>}
+                        {details && <span className="font-medium text-[var(--pencil)]">{details}</span>}
                       </div>
                     </div>
-                    <span className="shrink-0 text-xs text-[#8892b0]">
+                    <span className="shrink-0 text-xs font-medium text-[var(--pencil-light)]">
                       {formatWhen(event.created_at)}
                     </span>
                   </div>
@@ -598,35 +659,37 @@ export default function AccountPage() {
               })}
 
               {activityQuery.isError && (
-                <p className="text-sm text-amber-300">
-                  {getErrorMessage(activityQuery.error, 'Failed to load activity')}
+                <p className="text-xs text-[var(--terracotta)]">
+                  {getErrorMessage(activityQuery.error, 'Failed to load security activity')}
                 </p>
               )}
               {activity && activity.events.length === 0 && (
-                <p className="text-sm text-[#8892b0]">No activity recorded yet.</p>
+                <p className="text-xs text-[var(--pencil)]">No activity recorded yet.</p>
               )}
 
               {activity && activityPages > 1 && (
-                <div className="flex items-center justify-between gap-3 pt-1">
-                  <p className="text-sm text-[#8892b0]">
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-[var(--paper-border)]">
+                  <p className="text-xs text-[var(--pencil)]">
                     Page {activity.page} of {activityPages}
                   </p>
                   <div className="flex gap-2">
                     <Button
                       size="sm"
+                      variant="outline"
                       disabled={activityPage <= 1 || activityQuery.isFetching}
                       onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
                     >
-                      <ChevronLeft className="size-4" />
+                      <ChevronLeft className="size-3.5" />
                       Prev
                     </Button>
                     <Button
                       size="sm"
+                      variant="outline"
                       disabled={activityPage >= activityPages || activityQuery.isFetching}
                       onClick={() => setActivityPage((p) => p + 1)}
                     >
                       Next
-                      <ChevronRight className="size-4" />
+                      <ChevronRight className="size-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -636,6 +699,7 @@ export default function AccountPage() {
         </motion.div>
       </main>
 
+      {/* Confirmation Dialog */}
       <Dialog
         open={confirmEverywhere}
         onOpenChange={(open) => {
@@ -646,8 +710,8 @@ export default function AccountPage() {
           <DialogHeader>
             <DialogTitle>Sign out everywhere?</DialogTitle>
             <DialogDescription>
-              This ends every session on every device and app, including this one.
-              You will need to sign in again.
+              This ends every active session across all devices, browsers, and applications,
+              including this one. You will need to sign in again to continue.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

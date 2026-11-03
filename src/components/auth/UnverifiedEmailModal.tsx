@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { MailCheck } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -36,10 +37,15 @@ export function UnverifiedEmailModal() {
     <Dialog open={showVerifyModal} onOpenChange={setShowVerifyModal}>
       <DialogContent>
         <DialogHeader>
+          <div className="flex items-center gap-2 justify-center sm:justify-start text-[var(--forest)] mb-1">
+            <MailCheck className="size-5" />
+            <span className="font-hand text-lg font-semibold">safety note</span>
+          </div>
           <DialogTitle>Verify your email</DialogTitle>
           <DialogDescription>
-            Your account works, but <strong className="text-[#ccd6f6]">{user.email}</strong> is
-            not verified yet. Check your inbox or resend the link.
+            Your account is working, but{' '}
+            <strong className="text-[var(--ink)] font-semibold">{user.email}</strong> is not verified yet.
+            Please check your inbox to confirm your address.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -47,7 +53,7 @@ export function UnverifiedEmailModal() {
             Later
           </Button>
           <Button variant="default" onClick={handleResend} disabled={sending}>
-            {sending ? 'Sending…' : 'Resend link'}
+            {sending ? 'Sending link…' : 'Resend verification link'}
           </Button>
         </DialogFooter>
       </DialogContent>

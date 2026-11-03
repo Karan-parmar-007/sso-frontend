@@ -31,13 +31,13 @@ export function PasswordInput({
     <div className="relative">
       <Input
         type={visible ? 'text' : 'password'}
-        className={cn('pr-10', className)}
+        className={cn('pr-11', className)}
         {...props}
       />
       <button
         type="button"
         onClick={handleToggle}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8892b0] hover:text-[#64ffda] transition-colors focus:outline-none"
+        className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-[var(--pencil)] hover:text-[var(--forest)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest)] rounded-sm"
         tabIndex={-1}
         aria-label={visible ? 'Hide password' : 'Show password'}
       >

@@ -15,7 +15,6 @@ import {
   formatWhen,
   shortUserAgent,
 } from '@/lib/auditEvents'
-import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 50
@@ -32,7 +31,6 @@ export function AuditLogPanel({
   const [userIdDraft, setUserIdDraft] = useState(userId)
   const [appliedUserId, setAppliedUserId] = useState(userId)
 
-  // Parent changed the filter (e.g. "Activity" on a user row).
   if (userId !== appliedUserId) {
     setAppliedUserId(userId)
     setUserIdDraft(userId)
@@ -51,33 +49,37 @@ export function AuditLogPanel({
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4">
+        <span className="desk-sheet-tape" aria-hidden />
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pt-2">
           <div>
-            <CardTitle className="flex items-center gap-2 text-2xl">
-              <ScrollText className="size-5 text-[#64ffda]" />
+            <p className="font-hand text-xl font-semibold text-[var(--forest)] leading-none">
+              system ledger
+            </p>
+            <CardTitle className="text-2xl sm:text-3xl flex items-center gap-2">
+              <ScrollText className="size-5 text-[var(--forest)]" />
               Audit log
             </CardTitle>
             <CardDescription>
               Security events across all accounts.{' '}
               {data && (
                 <>
-                  Matching: <span className="text-[#64ffda]">{data.total_count}</span>
+                  Matching: <strong className="text-[var(--forest)]">{data.total_count}</strong>
                 </>
               )}
             </CardDescription>
           </div>
-          <Button size="sm" onClick={() => audit.refetch()} disabled={audit.isFetching}>
-            <RefreshCw className={`size-4 ${audit.isFetching ? 'animate-spin' : ''}`} />
+          <Button size="sm" variant="outline" onClick={() => audit.refetch()} disabled={audit.isFetching}>
+            <RefreshCw className={`size-3.5 ${audit.isFetching ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="space-y-2">
-              <Label htmlFor="audit-event">Event</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="audit-event">Filter by event</Label>
               <select
                 id="audit-event"
-                className={cn(selectClass, 'h-10 w-full sm:w-72')}
+                className={cn(selectClass, 'h-11 w-full sm:w-72')}
                 value={event}
                 onChange={(e) => {
                   setEvent(e.target.value)
@@ -93,8 +95,8 @@ export function AuditLogPanel({
               </select>
             </div>
             <form onSubmit={applyUserId} className="flex flex-1 items-end gap-2">
-              <div className="flex-1 space-y-2">
-                <Label htmlFor="audit-user">User ID</Label>
+              <div className="flex-1 space-y-1.5">
+                <Label htmlFor="audit-user">Filter by user ID</Label>
                 <Input
                   id="audit-user"
                   placeholder="Filter by user id"
@@ -103,15 +105,15 @@ export function AuditLogPanel({
                   onChange={(e) => setUserIdDraft(e.target.value)}
                 />
               </div>
-              <Button type="submit" size="sm" className="h-10">
+              <Button type="submit" size="default" variant="default" className="h-11 px-5">
                 Apply
               </Button>
               {appliedUserId && (
                 <Button
                   type="button"
-                  size="sm"
+                  size="default"
                   variant="ghost"
-                  className="h-10"
+                  className="h-11"
                   onClick={() => onUserIdChange('')}
                 >
                   <X className="size-4" />
@@ -121,70 +123,66 @@ export function AuditLogPanel({
             </form>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-[rgba(100,255,218,0.1)]">
-            <table className="w-full text-sm">
-              <thead className="bg-[#0a192f]/60 text-[#8892b0]">
+          <div className="overflow-x-auto rounded-xl border border-[var(--paper-border)] bg-[var(--paper)]">
+            <table className="w-full text-xs sm:text-sm">
+              <thead className="border-b border-[var(--paper-border)] bg-[var(--forest-tint-subtle)] text-[var(--pencil)]">
                 <tr>
-                  <th className="text-left p-3 font-medium">When</th>
-                  <th className="text-left p-3 font-medium">Event</th>
-                  <th className="text-left p-3 font-medium">User</th>
-                  <th className="text-left p-3 font-medium">IP / device</th>
-                  <th className="text-left p-3 font-medium">Details</th>
+                  <th className="text-left p-3 font-semibold uppercase tracking-wider text-[11px]">When</th>
+                  <th className="text-left p-3 font-semibold uppercase tracking-wider text-[11px]">Event</th>
+                  <th className="text-left p-3 font-semibold uppercase tracking-wider text-[11px]">User</th>
+                  <th className="text-left p-3 font-semibold uppercase tracking-wider text-[11px]">IP / Device</th>
+                  <th className="text-left p-3 font-semibold uppercase tracking-wider text-[11px]">Details</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[var(--paper-border)]">
                 {data?.events.map((e) => {
                   const tone = eventTone(e.event)
                   return (
                     <tr
                       key={e.id}
-                      className="border-t border-[rgba(100,255,218,0.08)] align-top hover:bg-[#112240]/80"
+                      className="align-top hover:bg-[var(--forest-tint-subtle)] transition-colors"
                     >
-                      <td className="p-3 whitespace-nowrap text-xs text-[#8892b0]">
+                      <td className="p-3 whitespace-nowrap text-xs text-[var(--pencil-light)]">
                         {formatWhen(e.created_at)}
                       </td>
-                      <td className="p-3">
-                        <p
+                      <td className="p-3 whitespace-nowrap">
+                        <span
                           className={cn(
+                            'font-semibold text-xs',
                             tone === 'danger'
-                              ? 'text-red-300'
+                              ? 'text-[var(--terracotta)]'
                               : tone === 'warning'
-                                ? 'text-amber-300'
-                                : 'text-[#ccd6f6]'
+                                ? 'text-[var(--amber-text)]'
+                                : 'text-[var(--ink)]'
                           )}
                         >
                           {eventLabel(e.event)}
-                        </p>
-                        <p className="font-mono text-[11px] text-[#8892b0]">{e.event}</p>
+                        </span>
+                        <p className="font-mono text-[10px] text-[var(--pencil-light)]">{e.event}</p>
                       </td>
-                      <td className="p-3 text-xs">
-                        {e.email && <p className="text-[#ccd6f6]">{e.email}</p>}
+                      <td className="p-3">
+                        {e.email && <p className="font-medium text-[var(--ink)]">{e.email}</p>}
                         {e.user_id && (
                           <button
                             type="button"
-                            className="font-mono text-[11px] text-[#64ffda] hover:underline"
-                            title="Show only this user"
                             onClick={() => onUserIdChange(e.user_id!)}
+                            className="font-mono text-[11px] text-[var(--forest)] hover:underline cursor-pointer"
+                            title="Filter by this user id"
                           >
                             {e.user_id}
                           </button>
                         )}
-                        {e.actor_id && e.actor_id !== e.user_id && (
-                          <p className="text-[11px] text-[#8892b0]">
-                            by <span className="font-mono">{e.actor_id}</span>
-                          </p>
-                        )}
-                        {!e.email && !e.user_id && <span className="text-[#8892b0]">—</span>}
+                        {!e.email && !e.user_id && <span className="text-[var(--pencil-light)]">—</span>}
                       </td>
-                      <td className="p-3 text-xs text-[#8892b0]">
-                        <p>{e.ip || '—'}</p>
+                      <td className="p-3 text-xs text-[var(--pencil)]">
+                        {e.ip && <p className="font-mono">{e.ip}</p>}
                         {e.user_agent && (
-                          <p className="max-w-56 truncate" title={e.user_agent}>
-                            {shortUserAgent(e.user_agent, 48)}
+                          <p className="truncate max-w-[200px] text-[var(--pencil-light)]" title={e.user_agent}>
+                            {shortUserAgent(e.user_agent, 40)}
                           </p>
                         )}
                       </td>
-                      <td className="p-3 text-xs text-[#8892b0] break-words">
+                      <td className="p-3 text-xs text-[var(--pencil)] break-words">
                         {eventDetails(e) || '—'}
                       </td>
                     </tr>
@@ -192,15 +190,8 @@ export function AuditLogPanel({
                 })}
                 {data && data.events.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-[#8892b0]">
-                      No matching events
-                    </td>
-                  </tr>
-                )}
-                {audit.isError && (
-                  <tr>
-                    <td colSpan={5} className="p-6 text-center text-amber-300">
-                      {getErrorMessage(audit.error, 'Failed to load audit log')}
+                    <td colSpan={5} className="p-8 text-center text-xs text-[var(--pencil)]">
+                      No security events matched the active filters.
                     </td>
                   </tr>
                 )}
@@ -208,29 +199,33 @@ export function AuditLogPanel({
             </table>
           </div>
 
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-[#8892b0]">
-              Page {page} of {totalPages}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                disabled={page <= 1 || audit.isFetching}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <ChevronLeft className="size-4" />
-                Prev
-              </Button>
-              <Button
-                size="sm"
-                disabled={page >= totalPages || audit.isFetching}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-                <ChevronRight className="size-4" />
-              </Button>
+          {data && totalPages > 1 && (
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <p className="text-xs text-[var(--pencil)]">
+                Page {data.page} of {totalPages}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page <= 1 || audit.isFetching}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="size-3.5" />
+                  Prev
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page >= totalPages || audit.isFetching}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                  <ChevronRight className="size-3.5" />
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </motion.div>

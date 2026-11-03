@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { ThemeProvider, useTheme } from '@/contexts/ThemeContext'
 import { AuthLayout } from '@/components/AuthLayout'
 import {
   OwnerRoute,
@@ -19,48 +20,58 @@ import AccountPage from '@/pages/AccountPage'
 import AdminPage from '@/pages/AdminPage'
 import ConsentPage from '@/pages/ConsentPage'
 
+function ThemedToaster() {
+  const { resolvedTheme } = useTheme()
+  return (
+    <Toaster
+      theme={resolvedTheme}
+      position="top-center"
+      toastOptions={{
+        className: 'border font-sans text-sm shadow-md',
+        style: {
+          background: 'var(--paper)',
+          border: '1.5px solid var(--paper-border-strong)',
+          color: 'var(--ink)',
+        },
+      }}
+    />
+  )
+}
+
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <UnverifiedEmailModal />
-        <Toaster
-          theme="dark"
-          position="top-center"
-          toastOptions={{
-            style: {
-              background: '#112240',
-              border: '1px solid rgba(100,255,218,0.15)',
-              color: '#ccd6f6',
-            },
-          }}
-        />
-        <Routes>
-          <Route element={<AuthLayout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route element={<PublicOnlyRoute />}>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/signup" element={<SignupPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <ThemedToaster />
+          <UnverifiedEmailModal />
+          <Routes>
+            <Route element={<AuthLayout />}>
+              <Route path="/" element={<HomePage />} />
+              <Route element={<PublicOnlyRoute />}>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/signup" element={<SignupPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              </Route>
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
+              <Route path="/confirm-email" element={<ConfirmEmailPage />} />
+              {/* OAuth consent: signs in first (via ?next=) when needed */}
+              <Route path="/consent" element={<ConsentPage />} />
             </Route>
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/verify-email" element={<VerifyEmailPage />} />
-            <Route path="/confirm-email" element={<ConfirmEmailPage />} />
-            {/* OAuth consent: signs in first (via ?next=) when needed */}
-            <Route path="/consent" element={<ConsentPage />} />
-          </Route>
 
-          <Route element={<PrivateRoute />}>
-            <Route path="/account" element={<AccountPage />} />
-          </Route>
+            <Route element={<PrivateRoute />}>
+              <Route path="/account" element={<AccountPage />} />
+            </Route>
 
-          <Route element={<OwnerRoute />}>
-            <Route path="/admin" element={<AdminPage />} />
-          </Route>
+            <Route element={<OwnerRoute />}>
+              <Route path="/admin" element={<AdminPage />} />
+            </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }

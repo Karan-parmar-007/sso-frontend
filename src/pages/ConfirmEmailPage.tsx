@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { toast } from 'sonner'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AlertCircle, Loader2, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import apiClient from '@/lib/api'
 import { useAuth, type AuthUser } from '@/contexts/AuthContext'
@@ -16,9 +16,8 @@ export default function ConfirmEmailPage() {
   const navigate = useNavigate()
   const [status, setStatus] = useState<'pending' | 'error'>(token ? 'pending' : 'error')
   const [message, setMessage] = useState(
-    token ? 'Confirming email change…' : 'Missing confirmation token'
+    token ? 'Confirming your new email address…' : 'Missing confirmation token'
   )
-  // Tokens are single-use: never post twice (StrictMode re-runs effects).
   const submitted = useRef<string | null>(null)
 
   useEffect(() => {
@@ -27,46 +26,64 @@ export default function ConfirmEmailPage() {
     ;(async () => {
       try {
         const { data } = await apiClient.post<AuthUser>('/confirm-email-change', { token })
-        // The backend signed this account out everywhere (cookies cleared);
-        // forget the user locally and tell other tabs.
         await logout()
         toast.success('Email updated')
         const state: LoginLocationState = {
           email: data.email,
           notice: {
             title: 'Email updated',
-            body: `Your email is now ${data.email}. For your security you were signed out everywhere — sign in again with your new address.`,
+            body: `Your email is now ${data.email}. For security you were signed out everywhere — please sign in again with your new address.`,
           },
         }
         navigate('/login', { replace: true, state })
       } catch (err) {
         setStatus('error')
-        setMessage(getErrorMessage(err, 'Confirmation failed'))
+        setMessage(getErrorMessage(err, 'Confirmation failed or link expired.'))
       }
     })()
   }, [token, logout, navigate])
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-md"
-    >
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">
-            Confirm <span className="gradient-text">email</span>
-          </CardTitle>
-          <CardDescription>{message}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {status === 'error' && (
-            <Button asChild variant="default" className="w-full">
-              <Link to="/account">Back to account</Link>
-            </Button>
+    <div className="w-full max-w-md mx-auto py-4 sm:py-8">
+      <motion.section
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="desk-sheet p-6 sm:p-8 text-center"
+      >
+        <span className="desk-sheet-tape" aria-hidden />
+
+        <div className="mx-auto flex justify-center mb-4">
+          {status === 'pending' ? (
+            <div className="size-12 rounded-full bg-[var(--forest-tint)] flex items-center justify-center text-[var(--forest)]">
+              <Loader2 className="size-6 animate-spin" />
+            </div>
+          ) : (
+            <div className="size-12 rounded-full bg-[var(--terracotta-tint)] flex items-center justify-center text-[var(--terracotta)]">
+              <AlertCircle className="size-7" />
+            </div>
           )}
-        </CardContent>
-      </Card>
-    </motion.div>
+        </div>
+
+        <h1 className="font-hand text-3xl font-bold text-[var(--ink)] leading-tight">
+          {status === 'pending' ? 'Confirming email' : 'Confirmation problem'}
+        </h1>
+
+        <p className="text-xs sm:text-sm text-[var(--pencil)] mt-2 leading-relaxed">
+          {message}
+        </p>
+
+        {status === 'error' && (
+          <div className="mt-6">
+            <Button asChild variant="default" size="lg" className="w-full">
+              <Link to="/account">
+                <ArrowLeft className="size-4" />
+                Back to account
+              </Link>
+            </Button>
+          </div>
+        )}
+      </motion.section>
+    </div>
   )
 }

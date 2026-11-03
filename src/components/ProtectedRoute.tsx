@@ -1,19 +1,20 @@
 import { useMemo } from 'react'
 import { Navigate, Outlet, useLocation, useSearchParams } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { loginPathFor, resolveReturnUrl } from '@/lib/returnUrl'
 
 export function FullPageLoading() {
   return (
-    <div className="min-h-svh flex items-center justify-center text-[#8892b0]">
-      Loading…
+    <div className="min-h-svh flex flex-col items-center justify-center text-[var(--pencil)] gap-3">
+      <Loader2 className="size-6 animate-spin text-[var(--forest)]" />
+      <span className="font-hand text-lg text-[var(--pencil)]">opening desk…</span>
     </div>
   )
 }
 
 /** Sends the visitor to /login?next=<this page> so they come back afterwards. */
 function RedirectToLogin() {
-  // Re-render when the route changes so `next` is always the current URL.
   useLocation()
   return <Navigate to={loginPathFor(window.location.href)} replace />
 }
